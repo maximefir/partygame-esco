@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <meta name="theme-color" content="#0f172a">
+  <title>Soirée Quiz</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    window.tailwind && (tailwind.config = { theme: { extend: { fontFamily: { sans: ['Outfit', 'system-ui', 'sans-serif'] } } } });
+  </script>
+
+  <!-- Firebase (compat, via CDN) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+  <!-- ⚙️ Toute la config de la soirée -->
+  <script src="config.js"></script>
+
+  <style>
+    :root { --bg:#0f172a; --cyan:#22d3ee; --pink:#f472b6; --violet:#a78bfa; --lime:#a3e635; --red:#fb7185; }
+    html, body { background: var(--bg); }
+    body {
+      font-family: 'Outfit', system-ui, sans-serif;
+      color: #e2e8f0;
+      min-height: 100dvh;
+      background:
+        radial-gradient(60rem 30rem at 110% -10%, rgba(167,139,250,.18), transparent 60%),
+        radial-gradient(50rem 30rem at -20% 110%, rgba(34,211,238,.14), transparent 60%),
+        var(--bg);
+      background-attachment: fixed;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior: none;
+    }
+    .neon-text { text-shadow: 0 0 18px rgba(167,139,250,.55); }
+    .glass { background: rgba(30,41,59,.55); border: 1px solid rgba(148,163,184,.14); backdrop-filter: blur(10px); }
+
+    @keyframes inRight { from { opacity:0; transform: translateX(46px) scale(.98); } to { opacity:1; transform:none; } }
+    @keyframes inLeft  { from { opacity:0; transform: translateX(-46px) scale(.98); } to { opacity:1; transform:none; } }
+    @keyframes pop     { 0% { transform: scale(.6); opacity:0 } 60% { transform: scale(1.08); opacity:1 } 100% { transform: scale(1) } }
+    @keyframes floaty  { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-8px) } }
+    @keyframes shake   { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+    .in-right { animation: inRight .38s cubic-bezier(.2,.8,.2,1) both; }
+    .in-left  { animation: inLeft  .38s cubic-bezier(.2,.8,.2,1) both; }
+    .pop      { animation: pop .5s cubic-bezier(.2,.8,.2,1) both; }
+    .floaty   { animation: floaty 3s ease-in-out infinite; }
+    .shake    { animation: shake .3s ease-in-out 2; }
+
+    .btn-pick {
+      position: relative; width: 100%; min-height: 64px; border-radius: 18px;
+      font-weight: 700; font-size: 1.2rem; letter-spacing: .01em;
+      background: rgba(30,41,59,.7); border: 2px solid rgba(71,85,105,.6);
+      transition: transform .12s ease, border-color .2s, box-shadow .2s, background .2s;
+    }
+    .btn-pick:active { transform: scale(.96); }
+    .btn-pick.selected { border-color: var(--cyan); background: rgba(34,211,238,.14); box-shadow: 0 0 0 1px var(--cyan), 0 0 24px rgba(34,211,238,.45); }
+    .btn-main {
+      width: 100%; min-height: 58px; border-radius: 18px; font-weight: 800; font-size: 1.15rem;
+      background: linear-gradient(135deg, #8b5cf6, #22d3ee); color: #0b1020;
+      box-shadow: 0 10px 30px -10px rgba(139,92,246,.7);
+      transition: transform .12s, opacity .2s, filter .2s;
+    }
+    .btn-main:active { transform: scale(.97); }
+    .btn-main:disabled { opacity: .35; filter: grayscale(.6); }
+    .btn-ghost { min-height: 58px; border-radius: 18px; font-weight: 700; padding: 0 1.2rem; background: rgba(30,41,59,.8); border: 1px solid rgba(71,85,105,.7); }
+    .btn-ghost:active { transform: scale(.97); }
+
+    .duel-btn { width: 100%; min-height: 26vh; border-radius: 26px; font-weight: 900; font-size: clamp(2rem, 9vw, 3.2rem); letter-spacing: .02em; transition: transform .12s, box-shadow .2s, filter .2s; }
+    .duel-btn:active { transform: scale(.97); }
+    .duel-a { background: linear-gradient(135deg, rgba(34,211,238,.25), rgba(34,211,238,.08)); border: 3px solid var(--cyan); color: #a5f3fc; box-shadow: 0 0 30px -6px rgba(34,211,238,.6); }
+    .duel-b { background: linear-gradient(135deg, rgba(244,114,182,.25), rgba(244,114,182,.08)); border: 3px solid var(--pink); color: #fbcfe8; box-shadow: 0 0 30px -6px rgba(244,114,182,.6); }
+    .duel-btn.selected { filter: brightness(1.35); transform: scale(1.02); }
+    .duel-btn.dim { opacity: .35; }
+
+    input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 12px; border-radius: 99px; outline: none;
+      background: linear-gradient(90deg, var(--violet) var(--p,50%), rgba(51,65,85,.9) var(--p,50%)); }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 32px; height: 32px; border-radius: 50%; background: #fff; border: 4px solid var(--violet); box-shadow: 0 0 16px rgba(167,139,250,.8); cursor: pointer; }
+    input[type=range]::-moz-range-thumb { width: 26px; height: 26px; border-radius: 50%; background: #fff; border: 4px solid var(--violet); box-shadow: 0 0 16px rgba(167,139,250,.8); }
+
+    textarea, input[type=text], select {
+      width: 100%; border-radius: 16px; background: rgba(15,23,42,.8); border: 2px solid rgba(71,85,105,.7);
+      padding: .9rem 1rem; font-size: 1.05rem; color: #f1f5f9; outline: none; transition: border-color .2s, box-shadow .2s;
+    }
+    textarea:focus, input[type=text]:focus, select:focus { border-color: var(--violet); box-shadow: 0 0 0 4px rgba(167,139,250,.2); }
+    select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, #94a3b8 50%), linear-gradient(135deg, #94a3b8 50%, transparent 50%);
+      background-position: calc(100% - 22px) 50%, calc(100% - 16px) 50%; background-size: 6px 6px; background-repeat: no-repeat; }
+    .err { border-color: var(--red) !important; box-shadow: 0 0 0 4px rgba(251,113,133,.2) !important; }
+
+    .avatar { display:grid; place-items:center; border-radius: 50%; font-weight: 900; color:#0b1020; background: linear-gradient(135deg, var(--violet), var(--cyan)); box-shadow: 0 0 30px rgba(167,139,250,.55); }
+    #progress { transition: width .45s cubic-bezier(.2,.8,.2,1); }
+    .safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+  </style>
+</head>
+
+<body class="antialiased">
+  <header class="fixed top-0 inset-x-0 z-30 bg-[#0f172a]/85 backdrop-blur border-b border-slate-800/80">
+    <div class="max-w-xl mx-auto px-4 pt-3 pb-2">
+      <div class="flex items-center justify-between text-xs font-semibold uppercase tracking-widest">
+        <span id="sectionLabel" class="text-violet-300">Identification</span>
+        <span id="stepCounter" class="text-slate-400"></span>
+      </div>
+      <div class="mt-2 h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+        <div id="progress" class="h-full w-0 rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-400 to-cyan-400 shadow-[0_0_12px_rgba(167,139,250,.8)]"></div>
+      </div>
+    </div>
+  </header>
+
+  <div id="modeBanner" class="hidden fixed top-[58px] inset-x-0 z-20 text-center text-[11px] font-semibold py-1 bg-amber-500/15 text-amber-300 border-b border-amber-500/30">
+    MODE LOCAL (test) — Firebase n'est pas configuré dans config.js
+  </div>
+
+  <main class="max-w-xl mx-auto px-4 pt-24 pb-36">
+    <div id="screen"></div>
+  </main>
+
+  <footer id="footer" class="fixed bottom-0 inset-x-0 z-30 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/95 to-transparent pt-6">
+    <div class="max-w-xl mx-auto px-4 safe-bottom flex gap-3" id="footerInner"></div>
+  </footer>
+
+  <input type="file" accept="image/*" id="photoInput" class="hidden">
+
+<script>
+/* =====================================================================
+   LOGIQUE — index.html (vue joueurs). Rien à modifier ici : tout est
+   dans config.js.
+   ===================================================================== */
+const C = CONFIG;
+const DOSSIER = C.dossierBase || 'soiree';
+const REF = DOSSIER + '/reponses';
+const REF_PHOTOS = DOSSIER + '/photos';
+const LOCAL_DB_KEY = 'soireeQuiz_localDB_' + DOSSIER;
+const LOCAL_PHOTO_KEY = 'soireeQuiz_localPhotos_' + DOSSIER;
+const SECTIONS = ['Identification', 'Qui est le plus...', 'Face-à-Face', 'Qui est qui ?', 'Le Tribunal', 'Un gage ou t\'affonnes', 'Top 3 Liégeois', 'Photo Roulette', 'Conseil de Tribu', 'Envoi'];
+const NB_ETAPES = 8;
+
+/* ---------- Utilitaires ---------- */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fbKey = s => String(s).replace(/[.#$/\[\]]/g, '_');
+const fill = (txt, nom) => String(txt || '').replace(/\{nom\}/g, nom);
+const toArr = x => Array.isArray(x) ? x : (x && typeof x === 'object') ? Object.keys(x).sort((a, b) => a - b).map(k => x[k]) : [];
+const LS = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} },
+};
+
+/* ---------- Firebase ou mode local ---------- */
+function firebaseIsConfigured() {
+  if (typeof firebaseConfig === 'undefined' || !firebaseConfig) return false;
+  const { apiKey, databaseURL } = firebaseConfig;
+  if (!apiKey || !databaseURL) return false;
+  return !/COLLE_|ton-projet|XXXX/i.test(apiKey + ' ' + databaseURL);
+}
+let db = null;
+if (firebaseIsConfigured() && typeof firebase !== 'undefined') {
+  try { firebase.initializeApp(firebaseConfig); db = firebase.database(); }
+  catch (e) { console.error('Firebase init error', e); }
+}
+if (!db) $('#modeBanner').classList.remove('hidden');
+
+async function saveResponse(player, data, photo) {
+  const k = fbKey(player);
+  if (db) {
+    const ops = [db.ref(REF + '/' + k).set(data)];
+    ops.push(photo ? db.ref(REF_PHOTOS + '/' + k).set({ joueur: player, data: photo, envoyeLe: Date.now() }) : db.ref(REF_PHOTOS + '/' + k).remove());
+    return Promise.all(ops);
+  }
+  const all = LS.get(LOCAL_DB_KEY) || {}; all[k] = data; LS.set(LOCAL_DB_KEY, all);
+  const ph = LS.get(LOCAL_PHOTO_KEY) || {};
+  if (photo) ph[k] = { joueur: player, data: photo, envoyeLe: Date.now() }; else delete ph[k];
+  if (!LS.set(LOCAL_PHOTO_KEY, ph)) throw new Error('stockage local plein');
+}
+async function getResponse(player) {
+  try {
+    if (db) { const s = await db.ref(REF + '/' + fbKey(player)).get(); return s.val(); }
+    return (LS.get(LOCAL_DB_KEY) || {})[fbKey(player)] || null;
+  } catch (e) { return null; }
+}
+async function getPhoto(player) {
+  try {
+    if (db) { const s = await db.ref(REF_PHOTOS + '/' + fbKey(player)).get(); const v = s.val(); return v ? v.data : ''; }
+    const v = (LS.get(LOCAL_PHOTO_KEY) || {})[fbKey(player)]; return v ? v.data : '';
+  } catch (e) { return ''; }
+}
+
+/* ---------- Tribunal : attribution secrète (Secret Santa) ----------
+   Tirage pseudo-aléatoire basé sur "graineTribunal" + la liste des joueurs :
+   chaque téléphone calcule exactement le même tirage, sans serveur.
+   Chaque joueur a 1 cible, chaque joueur est la cible d'1 seul autre, jamais soi-même. */
+function xmur3(str) { let h = 1779033703 ^ str.length; for (let i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = h << 13 | h >>> 19; } return () => { h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); return (h ^= h >>> 16) >>> 0; }; }
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function secretAssignments(salt, avoid) {
+  const J = C.joueurs.slice();
+  const rnd = mulberry32(xmur3((C.graineTribunal || 'tribunal') + '|' + J.join(',') + (salt ? '|' + salt : ''))());
+  let fallback = null;
+  for (let tries = 0; tries < 5000; tries++) {
+    const p = J.slice();
+    for (let i = p.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+    if (!p.every((x, i) => x !== J[i])) continue;
+    const m = Object.fromEntries(J.map((j, i) => [j, p[i]]));
+    if (!avoid || J.every(j => m[j] !== avoid[j])) return m;   // si possible : pas la même cible qu'au Tribunal
+    fallback = fallback || m;
+  }
+  return fallback || Object.fromEntries(J.map((j, i) => [j, J[(i + 1) % J.length]]));
+}
+function tribunalAssignments() { return secretAssignments('', null); }
+function gageAssignments() { return secretAssignments('gage', tribunalAssignments()); }
+const TRIBUNAL = tribunalAssignments();
+const tribunalTarget = p => TRIBUNAL[p] || '';
+const GAGES = gageAssignments();
+const gageTarget = p => GAGES[p] || '';
+
+/* ---------- État ---------- */
+const blankState = () => ({
+  player: null, qui: {}, duels: {}, qq: {}, verite: '', gage: '',
+  top3: ['', '', ''], photo: '', plus: { cible: '', pourquoi: '' }, moins: { cible: '', pourquoi: '' },
+});
+let S = blankState();
+let screens = [];
+let idx = 0;
+let alreadySent = false;
+let sending = false;
+let lockedPlayer = null;   // prénom imposé par le lien personnalisé (?user=...)
+
+const draftKey = p => 'soireeQuiz_draft_' + DOSSIER + '_' + fbKey(p);
+const saveDraft = () => { if (S.player) LS.set(draftKey(S.player), S); };
+const others = () => C.joueurs.filter(j => j !== S.player);
+const voteOptions = () => C.conseilInterdireAutoVote ? others() : C.joueurs.slice();
+
+/* Recharge des réponses déjà envoyées (ex : le joueur revient depuis un autre téléphone) */
+function fromPayload(r, photo) {
+  const s = blankState();
+  s.player = r.joueur;
+  s.qui = { ...(r.qui || {}) };
+  s.duels = { ...(r.duels || {}) };
+  s.qq = { ...(r.quiEstQui || {}) };
+  s.verite = (r.tribunal && typeof r.tribunal.texte === 'string') ? r.tribunal.texte : '';
+  s.gage = (r.gage && typeof r.gage.texte === 'string') ? r.gage.texte : '';
+  const t = r.top3 || {}; s.top3 = [t.top1 || '', t.top2 || '', t.top3 || ''];
+  s.photo = photo || '';
+  const c = r.conseil || {};
+  s.plus = { cible: (c.plus || {}).cible || '', pourquoi: (c.plus || {}).pourquoi || '' };
+  s.moins = { cible: (c.moins || {}).cible || '', pourquoi: (c.moins || {}).pourquoi || '' };
+  return s;
+}
+
+function buildScreens() {
+  screens = [{ sec: 0, type: 'ident' }];
+  C.quiEstLePlus.forEach((q, i) => screens.push({ sec: 1, type: 'qui', i }));
+  C.duels.forEach((d, i) => screens.push({ sec: 2, type: 'duel', i }));
+  C.quiEstQui.forEach((q, i) => screens.push({ sec: 3, type: 'qq', i }));
+  screens.push({ sec: 4, type: 'trib' });
+  screens.push({ sec: 5, type: 'gage' });
+  screens.push({ sec: 6, type: 'top3' });
+  screens.push({ sec: 7, type: 'photo' });
+  screens.push({ sec: 8, type: 'conseil' });
+  screens.push({ sec: 9, type: 'recap' });
+}
+
+/* ---------- Rendu ---------- */
+function setHeader(sc) {
+  const isDone = sc.type === 'done';
+  const sec = isDone ? SECTIONS.length - 1 : sc.sec;
+  $('#sectionLabel').textContent = isDone ? 'Terminé ✔' : (sec >= 1 && sec <= NB_ETAPES ? `Étape ${sec}/${NB_ETAPES} · ` : '') + SECTIONS[sec];
+  const sameSec = screens.filter(s => s.sec === sc.sec);
+  const pos = sameSec.indexOf(sc);
+  $('#stepCounter').textContent = (!isDone && sameSec.length > 1) ? `${pos + 1} / ${sameSec.length}` : '';
+  const pct = isDone ? 100 : Math.round((idx / (screens.length - 1)) * 100);
+  $('#progress').style.width = pct + '%';
+}
+function footer(html) { $('#footerInner').innerHTML = html || ''; $('#footer').style.display = html ? '' : 'none'; }
+const backBtn = () => idx > 0 ? `<button class="btn-ghost" data-act="back" aria-label="Retour">←</button>` : '';
+
+function render(dir = 'right') {
+  const sc = screens[idx];
+  setHeader(sc);
+  const el = document.createElement('div');
+  el.className = dir === 'left' ? 'in-left' : 'in-right';
+  const R = RENDER[sc.type];
+  el.innerHTML = R.html(sc);
+  const host = $('#screen');
+  host.innerHTML = '';
+  host.appendChild(el);
+  footer(R.footer ? R.footer(sc) : '');
+  R.bind && R.bind(el, sc);
+  window.scrollTo(0, 0);
+}
+let advancing = false;
+function autoNext(delay) {
+  if (advancing) return;
+  advancing = true;
+  setTimeout(() => { advancing = false; go(1); }, delay);
+}
+function go(delta) {
+  const n = idx + delta;
+  if (n < 0 || n >= screens.length) return;
+  idx = n; render(delta < 0 ? 'left' : 'right');
+}
+function showDone() {
+  setHeader({ type: 'done' });
+  $('#screen').innerHTML = `<div class="in-right">${RENDER.done.html()}</div>`;
+  footer('');
+}
+
+const qTitle = (kicker, text, color = 'text-violet-300') => `
+  <p class="text-xs font-bold uppercase tracking-[.25em] ${color} mb-3">${kicker}</p>
+  <h1 class="text-[1.65rem] leading-tight font-extrabold text-white mb-6">${esc(text)}</h1>`;
+
+const RENDER = {
+  /* --- Étape 0 : identification --- */
+  ident: {
+    html: () => lockedPlayer ? `
+      <div class="text-center mb-8">
+        <div class="text-5xl mb-3 floaty">🎉</div>
+        <p class="text-xs font-bold uppercase tracking-[.3em] text-cyan-300">${esc(C.titreSoiree)}</p>
+        <h1 class="text-4xl font-black text-white mt-3 neon-text">Salut ${esc(lockedPlayer)} 👋</h1>
+      </div>
+      <div class="glass rounded-3xl p-5 space-y-3 text-slate-300">
+        <p>📝 <b class="text-white">${NB_ETAPES} étapes</b> à remplir avant ce soir : votes, duels, qui est qui, tribunal, gage, top 3, photo et conseil de tribu.</p>
+        <p>💾 Tes réponses sont <b class="text-white">sauvegardées sur ce téléphone</b> au fur et à mesure : tu peux t'arrêter et revenir plus tard avec le même lien.</p>
+        <p>🤫 Ne montre rien aux autres : tout sera révélé ce soir sur grand écran.</p>
+      </div>
+      <div id="identNote" class="mt-5 text-sm"></div>
+      <p class="text-center mt-6"><button class="text-xs text-slate-500 underline" data-act="unlock">Ce n'est pas toi ?</button></p>` : `
+      <div class="text-center mb-8">
+        <div class="text-5xl mb-3 floaty">🎉</div>
+        <p class="text-xs font-bold uppercase tracking-[.3em] text-cyan-300">${esc(C.titreSoiree)}</p>
+        <h1 class="text-4xl font-black text-white mt-2 neon-text">Qui es-tu ?</h1>
+        <p class="text-slate-400 mt-2">Choisis ton prénom pour commencer</p>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        ${C.joueurs.map(j => `<button class="btn-pick ${S.player === j ? 'selected' : ''}" data-player="${esc(j)}">${esc(j)}</button>`).join('')}
+      </div>
+      <div id="identNote" class="mt-5 text-sm"></div>
+      <p class="text-center text-xs text-slate-500 mt-8">Tes réponses sont anonymes à l'écran… sauf quand l'admin décide de révéler 😈</p>`,
+    footer: () => `<button class="btn-main" data-act="start" ${S.player ? '' : 'disabled'}>${alreadySent ? 'Modifier mes réponses →' : "C'est parti →"}</button>`,
+    bind: (el) => {
+      el.addEventListener('click', e => {
+        const b = e.target.closest('[data-player]'); if (!b) return;
+        pickPlayer(b.dataset.player);
+        $$('[data-player]', el).forEach(x => x.classList.toggle('selected', x === b));
+      });
+      if (S.player) checkAlreadySent();
+    },
+  },
+
+  /* --- Étape 1 : Qui est le plus... --- */
+  qui: {
+    html: (sc) => `
+      ${qTitle(`Qui est le plus… · Q${sc.i + 1}`, C.quiEstLePlus[sc.i])}
+      <div class="grid grid-cols-2 gap-3">
+        ${C.joueurs.map(j => `<button class="btn-pick ${S.qui['q' + sc.i] === j ? 'selected' : ''}" data-vote="${esc(j)}">${esc(j)}${j === S.player ? ' <span class="text-xs text-slate-400 font-medium">(toi)</span>' : ''}</button>`).join('')}
+      </div>`,
+    footer: (sc) => `${backBtn()}${S.qui['q' + sc.i] ? `<button class="btn-main" data-act="next">Suivant →</button>` : `<div class="flex-1 grid place-items-center text-slate-500 text-sm">Touche un prénom</div>`}`,
+    bind: (el, sc) => el.addEventListener('click', e => {
+      const b = e.target.closest('[data-vote]'); if (!b) return;
+      S.qui['q' + sc.i] = b.dataset.vote; saveDraft();
+      $$('[data-vote]', el).forEach(x => x.classList.toggle('selected', x === b));
+      autoNext(280);
+    }),
+  },
+
+  /* --- Étape 2 : Duels --- */
+  duel: {
+    html: (sc) => {
+      const d = C.duels[sc.i], v = S.duels['d' + sc.i];
+      return `
+      ${qTitle(`Face-à-Face · Duel ${sc.i + 1}`, d.question, 'text-pink-300')}
+      <div class="flex flex-col gap-3">
+        <button class="duel-btn duel-a ${v === 'A' ? 'selected' : v ? 'dim' : ''}" data-side="A">${esc(d.joueurA)}</button>
+        <div class="text-center font-black text-2xl text-slate-400 tracking-widest">VS</div>
+        <button class="duel-btn duel-b ${v === 'B' ? 'selected' : v ? 'dim' : ''}" data-side="B">${esc(d.joueurB)}</button>
+      </div>`;
+    },
+    footer: (sc) => `${backBtn()}${S.duels['d' + sc.i] ? `<button class="btn-main" data-act="next">Suivant →</button>` : `<div class="flex-1 grid place-items-center text-slate-500 text-sm">Choisis ton camp</div>`}`,
+    bind: (el, sc) => el.addEventListener('click', e => {
+      const b = e.target.closest('[data-side]'); if (!b) return;
+      S.duels['d' + sc.i] = b.dataset.side; saveDraft();
+      $$('[data-side]', el).forEach(x => { x.classList.toggle('selected', x === b); x.classList.toggle('dim', x !== b); });
+      autoNext(320);
+    }),
+  },
+
+  /* --- Étape 3 : Qui est qui ? --- */
+  qq: {
+    html: (sc) => {
+      const q = C.quiEstQui[sc.i];
+      return `
+      ${qTitle(`Qui est qui ? · Q${sc.i + 1}`, q.question, 'text-cyan-300')}
+      <input type="text" maxlength="80" id="qqInput" value="${esc(S.qq['q' + sc.i] || '')}" placeholder="${esc(q.exemple ? 'Ex : ' + q.exemple : 'Ta réponse')}" autocomplete="off" enterkeyhint="next">
+      ${q.aide ? `<p class="text-xs text-slate-400 mt-2">💡 ${esc(q.aide)}</p>` : ''}
+      <div class="glass rounded-2xl p-4 mt-5 text-sm text-slate-300 space-y-2">
+        <p>🙋 Réponds sur <b class="text-white">TOI</b>, honnêtement.</p>
+        <p>📺 Ce soir, toutes les réponses seront affichées en vrac : la table devra relier chaque réponse à la bonne personne.</p>
+      </div>`;
+    },
+    footer: () => `${backBtn()}<button class="btn-main" data-act="qqNext">Suivant →</button>`,
+    bind: (el, sc) => {
+      const inp = $('#qqInput', el);
+      inp.addEventListener('input', () => { S.qq['q' + sc.i] = inp.value; inp.classList.remove('err'); saveDraft(); });
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('[data-act=qqNext]').click(); } });
+    },
+  },
+
+  /* --- Étape 4 : Le Tribunal (cible secrète façon Secret Santa) --- */
+  trib: {
+    html: () => {
+      const t = tribunalTarget(S.player);
+      return `
+      <p class="text-xs font-bold uppercase tracking-[.25em] text-amber-300 mb-3">Le Tribunal · ta cible secrète</p>
+      <div class="rounded-3xl p-5 text-center mb-5 border-2 border-amber-300/50 bg-amber-300/5 shadow-[0_0_40px_-10px_rgba(251,191,36,.5)]">
+        <p class="text-slate-400 text-sm">Le hasard t'a attribué :</p>
+        <div class="avatar w-20 h-20 text-3xl mx-auto mt-3">${esc(t.slice(0, 1).toUpperCase())}</div>
+        <h1 class="text-4xl font-black text-white mt-3">${esc(t)}</h1>
+      </div>
+      <label class="block text-slate-200 font-semibold mb-3">${esc(fill(C.texteTribunal, t))}</label>
+      <textarea rows="5" maxlength="300" id="tribText" placeholder="${esc(C.exempleTribunal || 'Ex : Tu es tout le temps en retard.')}">${esc(S.verite)}</textarea>
+      <div class="flex justify-between text-xs mt-2">
+        <span id="nameWarn" class="text-amber-300"></span>
+        <span id="cnt" class="text-slate-500">${S.verite.length}/300</span>
+      </div>
+      <div class="glass rounded-2xl p-4 mt-4 text-sm text-slate-300 space-y-2">
+        <p>🔒 <b class="text-white">100% anonyme</b> : l'auteur n'est JAMAIS révélé à l'écran. Personne ne saura que c'est toi.</p>
+        <p>📺 Ce soir : on lit ta phrase, la table devine, puis on révèle à qui elle est destinée.</p>
+        <p>🚫 Ne mets pas son prénom : parle-lui directement (« Tu… »).</p>
+      </div>`;
+    },
+    footer: () => `${backBtn()}<button class="btn-main" data-act="tribNext">Suivant →</button>`,
+    bind: (el) => {
+      const ta = $('#tribText', el), t = tribunalTarget(S.player);
+      const check = () => {
+        $('#cnt', el).textContent = ta.value.length + '/300';
+        $('#nameWarn', el).textContent = t && ta.value.toLowerCase().includes(t.toLowerCase()) ? `⚠️ Retire « ${t} » de ta phrase, sinon ça grille le suspense !` : '';
+      };
+      ta.addEventListener('input', () => { S.verite = ta.value; ta.classList.remove('err'); saveDraft(); check(); });
+      check();
+    },
+  },
+
+  /* --- Étape 5 : Un gage ou t'affonnes --- */
+  gage: {
+    html: () => {
+      const t = gageTarget(S.player);
+      return `
+      <p class="text-xs font-bold uppercase tracking-[.25em] text-orange-300 mb-3">Un gage ou t'affonnes · ta cible secrète</p>
+      <div class="rounded-3xl p-5 text-center mb-5 border-2 border-orange-400/50 bg-orange-400/5 shadow-[0_0_40px_-10px_rgba(251,146,60,.5)]">
+        <p class="text-slate-400 text-sm">Le hasard t'a attribué :</p>
+        <div class="avatar w-20 h-20 text-3xl mx-auto mt-3">${esc(t.slice(0, 1).toUpperCase())}</div>
+        <h1 class="text-4xl font-black text-white mt-3">${esc(t)}</h1>
+      </div>
+      <label class="block text-slate-200 font-semibold mb-3">${esc(fill(C.texteGage, t))}</label>
+      <textarea rows="4" maxlength="200" id="gageText" placeholder="${esc(C.exempleGage || 'Ex : Imiter chaque joueur pendant 30 secondes.')}">${esc(S.gage)}</textarea>
+      <div class="flex justify-end text-xs mt-2"><span id="gcnt" class="text-slate-500">${S.gage.length}/200</span></div>
+      <div class="glass rounded-2xl p-4 mt-4 text-sm text-slate-300 space-y-2">
+        <p>🔒 <b class="text-white">100% anonyme</b> : personne ne saura que le gage vient de toi.</p>
+        <p>📺 Ce soir : on affiche son nom, puis ton gage. Pas cap ? <b class="text-white">Il affonne.</b> 🍺</p>
+        <p>✅ Un gage faisable sur place, pendant la soirée.</p>
+      </div>`;
+    },
+    footer: () => `${backBtn()}<button class="btn-main" data-act="gageNext">Suivant →</button>`,
+    bind: (el) => {
+      const ta = $('#gageText', el);
+      ta.addEventListener('input', () => { S.gage = ta.value; ta.classList.remove('err'); saveDraft(); $('#gcnt', el).textContent = ta.value.length + '/200'; });
+    },
+  },
+
+  /* --- Étape 6 : Top 3 --- */
+  top3: {
+    html: () => `
+      ${qTitle('Top 3 Liégeois', C.texteTop3, 'text-fuchsia-300')}
+      <div class="space-y-4">
+        ${['🥇 Top 1', '🥈 Top 2', '🥉 Top 3'].map((l, k) => `
+          <div class="glass rounded-2xl p-4">
+            <label class="block font-bold mb-2 text-slate-200">${l}</label>
+            <input type="text" maxlength="60" data-top="${k}" value="${esc(S.top3[k])}" placeholder="Prénom ou @insta" autocomplete="off">
+          </div>`).join('')}
+      </div>`,
+    footer: () => `${backBtn()}<button class="btn-main" data-act="next">Suivant →</button>`,
+    bind: (el) => el.addEventListener('input', e => {
+      const i = e.target.closest('[data-top]'); if (!i) return;
+      S.top3[+i.dataset.top] = i.value; saveDraft();
+    }),
+  },
+
+  /* --- Étape 7 : Photo Roulette --- */
+  photo: {
+    html: () => `
+      ${qTitle('Photo Roulette', C.textePhotoRoulette, 'text-cyan-300')}
+      <div id="photoZone">
+        ${S.photo ? `
+          <div class="glass rounded-3xl p-3">
+            <img src="${S.photo}" alt="Ta photo" class="w-full max-h-[50vh] object-contain rounded-2xl">
+          </div>
+          <div class="grid grid-cols-2 gap-3 mt-4">
+            <button class="btn-ghost" data-act="pickPhoto">🔄 Changer</button>
+            <button class="btn-ghost text-rose-300" data-act="removePhoto">🗑️ Retirer</button>
+          </div>` : `
+          <button class="w-full rounded-3xl border-2 border-dashed border-cyan-400/60 bg-cyan-400/5 py-14 flex flex-col items-center gap-3 active:scale-[.98] transition" data-act="pickPhoto">
+            <span class="text-6xl">📸</span>
+            <span class="text-xl font-bold text-cyan-200">Choisir une photo</span>
+            <span class="text-sm text-slate-400">Galerie ou appareil photo</span>
+          </button>`}
+        <p id="photoMsg" class="text-sm text-center mt-3 text-slate-400">${C.photoObligatoire ? 'Obligatoire · ' : ''}Personne ne verra que c'est toi avant ce soir.</p>
+      </div>`,
+    footer: () => `${backBtn()}<button class="btn-main" data-act="photoNext">${S.photo ? 'Suivant →' : C.photoObligatoire ? 'Plus tard →' : 'Passer →'}</button>`,
+  },
+
+  /* --- Étape 8 : Conseil de Tribu --- */
+  conseil: {
+    html: () => {
+      const opts = sel => `<option value="">— Choisir un joueur —</option>` + voteOptions().map(j => `<option ${sel === j ? 'selected' : ''}>${esc(j)}</option>`).join('');
+      const card = (type, color, icon, label, st) => `
+        <div class="rounded-3xl p-5 border-2 ${color}">
+          <div class="flex items-center gap-2 mb-3"><span class="text-2xl">${icon}</span><span class="font-black text-xl">${type === 'plus' ? 'VOTE +' : 'VOTE −'}</span></div>
+          <label class="block text-slate-200 font-semibold mb-2">${esc(label)}</label>
+          <select data-c="${type}">${opts(st.cible)}</select>
+          <label class="block text-slate-300 text-sm mt-4 mb-2">Pourquoi ? <span class="text-slate-500">(obligatoire)</span></label>
+          <textarea rows="3" maxlength="240" data-w="${type}" placeholder="Justifie ton vote...">${esc(st.pourquoi)}</textarea>
+        </div>`;
+      return `
+      ${qTitle('Conseil de Tribu', 'Le moment de vérité. Un vote positif, un vote négatif.', 'text-emerald-300')}
+      <div class="space-y-5">
+        ${card('plus', 'border-emerald-400/60 bg-emerald-400/10 text-emerald-200', '🟢', C.texteVotePlus, S.plus)}
+        ${card('moins', 'border-rose-400/60 bg-rose-500/10 text-rose-200', '🔴', C.texteVoteMoins, S.moins)}
+      </div>
+      <p class="text-center text-xs text-slate-500 mt-5">🔒 L'auteur des votes du Conseil reste anonyme, même à l'écran.</p>`;
+    },
+    footer: () => `${backBtn()}<button class="btn-main" data-act="conseilNext">Suivant →</button>`,
+    bind: (el) => {
+      el.addEventListener('change', e => { const s = e.target.closest('[data-c]'); if (s) { S[s.dataset.c].cible = s.value; s.classList.remove('err'); saveDraft(); } });
+      el.addEventListener('input', e => { const t = e.target.closest('[data-w]'); if (t) { S[t.dataset.w].pourquoi = t.value; t.classList.remove('err'); saveDraft(); } });
+    },
+  },
+
+  /* --- Récap & envoi --- */
+  recap: {
+    html: () => {
+      const nQui = Object.keys(S.qui).length, nDuel = Object.keys(S.duels).length;
+      const nQQ = C.quiEstQui.filter((q, i) => (S.qq['q' + i] || '').trim()).length;
+      const nTop = S.top3.filter(x => x.trim()).length;
+      const okC = S.plus.cible && S.plus.pourquoi.trim() && S.moins.cible && S.moins.pourquoi.trim();
+      const row = (ok, label, val, jump) => `
+        <button class="w-full flex items-center justify-between glass rounded-2xl px-4 py-3 text-left" data-jump="${jump}">
+          <span class="flex items-center gap-3"><span class="${ok ? 'text-emerald-400' : 'text-amber-400'} text-xl">${ok ? '✔' : '•'}</span><span class="font-semibold">${label}</span></span>
+          <span class="text-slate-400 text-sm">${val}</span>
+        </button>`;
+      return `
+      <div class="text-center mb-6">
+        <div class="text-5xl mb-2 floaty">🚀</div>
+        <h1 class="text-3xl font-black text-white">Prêt à envoyer, ${esc(S.player)} ?</h1>
+        <p class="text-slate-400 mt-1">Touche une ligne pour la modifier.</p>
+      </div>
+      <div class="space-y-2">
+        ${row(nQui === C.quiEstLePlus.length, 'Qui est le plus…', `${nQui}/${C.quiEstLePlus.length}`, 'qui')}
+        ${row(nDuel === C.duels.length, 'Face-à-Face', `${nDuel}/${C.duels.length}`, 'duel')}
+        ${row(nQQ === C.quiEstQui.length, 'Qui est qui ?', `${nQQ}/${C.quiEstQui.length}`, 'qq')}
+        ${row(!!S.verite.trim(), 'Le Tribunal', S.verite.trim() ? 'OK' : 'à écrire', 'trib')}
+        ${row(!!S.gage.trim(), 'Un gage ou t\'affonnes', S.gage.trim() ? 'OK' : 'à écrire', 'gage')}
+        ${row(nTop === 3, 'Top 3 Liégeois', `${nTop}/3`, 'top3')}
+        ${row(!!S.photo || !C.photoObligatoire, 'Photo Roulette', S.photo ? 'OK' : (C.photoObligatoire ? 'à ajouter' : 'aucune'), 'photo')}
+        ${row(okC, 'Conseil de Tribu', okC ? 'OK' : 'à compléter', 'conseil')}
+      </div>
+      ${alreadySent ? `<p class="mt-4 text-center text-sm text-amber-300">⚠️ Tu as déjà envoyé : renvoyer remplacera tes anciennes réponses.</p>` : ''}
+      <p id="sendErr" class="mt-4 text-center text-sm text-rose-300"></p>`;
+    },
+    footer: () => `${backBtn()}<button class="btn-main" data-act="send" id="sendBtn">${alreadySent ? 'Renvoyer mes réponses ✨' : 'Envoyer mes réponses ✨'}</button>`,
+    bind: (el) => el.addEventListener('click', e => {
+      const b = e.target.closest('[data-jump]'); if (!b) return;
+      const n = screens.findIndex(s => s.type === b.dataset.jump);
+      if (n >= 0) { idx = n; render('left'); }
+    }),
+  },
+
+  /* --- Confirmation --- */
+  done: {
+    html: () => `
+      <div class="text-center pt-6">
+        <div class="pop mx-auto w-32 h-32 rounded-full grid place-items-center text-6xl bg-emerald-400/15 border-4 border-emerald-400 shadow-[0_0_60px_rgba(52,211,153,.55)]">✔</div>
+        <h1 class="text-4xl font-black text-white mt-8 neon-text">C'est envoyé !</h1>
+        <p class="text-slate-300 mt-3 text-lg">Merci ${esc(S.player)} 🍻<br>Rendez-vous ce soir pour le dépouillement.</p>
+        <p class="text-slate-500 mt-4 text-sm">Tu peux encore modifier tes réponses jusqu'à ce soir en rouvrant ce lien.</p>
+        <div class="mt-10 grid gap-3">
+          <button class="btn-ghost" data-act="edit">Modifier mes réponses</button>
+        </div>
+      </div>`,
+  },
+};
+
+/* ---------- Photo : compression avant envoi ---------- */
+function compressImage(file, max = 1280, quality = 0.75) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.round(img.naturalWidth * s), h = Math.round(img.naturalHeight * s);
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      let out = c.toDataURL('image/jpeg', quality);
+      if (out.length > 900000) out = c.toDataURL('image/jpeg', 0.55);
+      resolve(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Format non supporté')); };
+    img.src = url;
+  });
+}
+$('#photoInput').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  const msg = $('#photoMsg'); if (msg) msg.textContent = '⏳ Préparation de la photo…';
+  try {
+    S.photo = await compressImage(f);
+    saveDraft();
+    if (screens[idx] && screens[idx].type === 'photo') render('right');
+  } catch (err) {
+    if (msg) { msg.textContent = '❌ Impossible de lire cette image, essaie une autre (ou fais une capture d\'écran).'; msg.className = 'text-sm text-center mt-3 text-rose-300'; }
+  }
+});
+
+/* ---------- Actions ---------- */
+function pickPlayer(name) {
+  if (S.player === name) return;
+  const draft = LS.get(draftKey(name));
+  S = Object.assign(blankState(), draft || {}, { player: name });
+  alreadySent = false;
+  LS.set('soireeQuiz_lastPlayer_' + DOSSIER, name);
+  buildScreens();
+  $('#footerInner [data-act=start]')?.removeAttribute('disabled');
+  checkAlreadySent(!draft);
+}
+async function checkAlreadySent(loadFromServer) {
+  const name = S.player;
+  const r = await getResponse(name);
+  if (name !== S.player) return;
+  alreadySent = !!r;
+  if (r && loadFromServer) {           // pas de brouillon sur ce téléphone → on recharge ce qui a été envoyé
+    const ph = await getPhoto(name);
+    if (name !== S.player) return;
+    S = fromPayload(r, ph); saveDraft(); buildScreens();
+  }
+  const n = $('#identNote');
+  if (n) n.innerHTML = alreadySent
+    ? `<div class="glass rounded-2xl p-3 text-emerald-300 text-center">✔ Réponses déjà envoyées. Tu peux encore les modifier jusqu'à ce soir.</div>`
+    : '';
+  const st = $('#footerInner [data-act=start]');
+  if (st && screens[idx] && screens[idx].type === 'ident') st.textContent = alreadySent ? 'Modifier mes réponses →' : "C'est parti →";
+}
+
+function validateConseil() {
+  let ok = true;
+  ['plus', 'moins'].forEach(t => {
+    const s = $(`[data-c=${t}]`), w = $(`[data-w=${t}]`);
+    if (!S[t].cible) { s.classList.add('err'); ok = false; }
+    if (!S[t].pourquoi.trim()) { w.classList.add('err'); ok = false; }
+  });
+  return ok;
+}
+
+function buildPayload() {
+  const quiEstQui = {};
+  C.quiEstQui.forEach((q, i) => { quiEstQui['q' + i] = (S.qq['q' + i] || '').trim(); });
+  const tribunal = { cible: tribunalTarget(S.player), texte: S.verite.trim() };
+  return {
+    joueur: S.player,
+    envoyeLe: Date.now(),
+    qui: { ...S.qui },
+    duels: { ...S.duels },
+    quiEstQui,
+    tribunal,
+    gage: { cible: gageTarget(S.player), texte: S.gage.trim() },
+    top3: { top1: S.top3[0].trim(), top2: S.top3[1].trim(), top3: S.top3[2].trim() },
+    aPhoto: !!S.photo,
+    conseil: {
+      plus: { cible: S.plus.cible, pourquoi: S.plus.pourquoi.trim() },
+      moins: { cible: S.moins.cible, pourquoi: S.moins.pourquoi.trim() },
+    },
+  };
+}
+
+async function send() {
+  if (sending) return;
+  const err = $('#sendErr');
+  const missingQ = C.quiEstLePlus.findIndex((q, i) => !S.qui['q' + i]);
+  const missingD = C.duels.findIndex((d, i) => !S.duels['d' + i]);
+  const okC = S.plus.cible && S.plus.pourquoi.trim() && S.moins.cible && S.moins.pourquoi.trim();
+  const okP = !!S.photo || !C.photoObligatoire;
+  const okT = !!S.verite.trim() && !!S.gage.trim();
+  const okQQ = C.quiEstQui.every((q, i) => (S.qq['q' + i] || '').trim());
+  if (missingQ >= 0 || missingD >= 0 || !okC || !okP || !okT || !okQQ) {
+    err.textContent = 'Il manque des réponses (lignes avec •). Touche-les pour compléter.';
+    $('#sendBtn').classList.add('shake'); setTimeout(() => $('#sendBtn')?.classList.remove('shake'), 700);
+    return;
+  }
+  sending = true;
+  const btn = $('#sendBtn'); btn.disabled = true; btn.textContent = 'Envoi en cours…';
+  try {
+    await Promise.race([
+      saveResponse(S.player, buildPayload(), S.photo),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('délai dépassé')), 20000)),
+    ]);
+    alreadySent = true;
+    saveDraft();
+    showDone();
+  } catch (e) {
+    console.error(e);
+    err.textContent = "Oups, l'envoi a échoué (" + (e.message || e) + "). Vérifie ta connexion et réessaie.";
+    btn.disabled = false; btn.textContent = 'Réessayer l\'envoi';
+  } finally { sending = false; }
+}
+
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  const act = a.dataset.act;
+  if (act === 'back') go(-1);
+  else if (act === 'next') go(1);
+  else if (act === 'start') { if (S.player) { buildScreens(); go(1); } }
+  else if (act === 'unlock') { lockedPlayer = null; render('right'); }
+  else if (act === 'qqNext') {
+    const i = screens[idx].i, inp = $('#qqInput');
+    if (!(S.qq['q' + i] || '').trim()) { inp.classList.add('err'); inp.focus(); return; }
+    go(1);
+  }
+  else if (act === 'pickPhoto') $('#photoInput').click();
+  else if (act === 'removePhoto') { S.photo = ''; saveDraft(); render('right'); }
+  else if (act === 'photoNext') go(1);   // sans photo on peut avancer, l'envoi final la réclamera
+  else if (act === 'tribNext') {
+    const ta = $('#tribText');
+    if (!S.verite.trim()) { ta.classList.add('err'); ta.focus(); return; }
+    go(1);
+  }
+  else if (act === 'gageNext') {
+    const ta = $('#gageText');
+    if (!S.gage.trim()) { ta.classList.add('err'); ta.focus(); return; }
+    go(1);
+  }
+  else if (act === 'conseilNext') { if (validateConseil()) go(1); }
+  else if (act === 'send') send();
+  else if (act === 'edit') { idx = screens.findIndex(s => s.type === 'recap'); render('left'); }
+});
+
+/* ---------- Démarrage ---------- */
+(function init() {
+  const params = new URLSearchParams(location.search);
+  const u = (params.get('user') || '').trim().toLowerCase();
+  const fromUrl = C.joueurs.find(j => j.toLowerCase() === u);
+  const last = LS.get('soireeQuiz_lastPlayer_' + DOSSIER);
+  const pre = fromUrl || (C.joueurs.includes(last) ? last : null);
+  if (fromUrl) lockedPlayer = fromUrl;
+  buildScreens();
+  if (pre) pickPlayer(pre);
+  idx = 0;
+  render();
+})();
+</script>
+</body>
+</html>

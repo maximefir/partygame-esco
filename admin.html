@@ -1,0 +1,1126 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Soirée Quiz · Admin</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    window.tailwind && (tailwind.config = { theme: { extend: { fontFamily: { sans: ['Outfit', 'system-ui', 'sans-serif'] } } } });
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- Firebase (compat, via CDN) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+  <!-- ⚙️ Toute la config de la soirée -->
+  <script src="config.js"></script>
+  <!-- Photo de test pour "Injecter Données Démo" (fichier facultatif) -->
+  <script src="demo-photo.js" onerror="void 0"></script>
+
+  <style>
+    :root { --bg:#0f172a; --cyan:#22d3ee; --pink:#f472b6; --violet:#a78bfa; --green:#34d399; --red:#fb7185; --gold:#fbbf24; }
+    /* Tout est en rem : la taille suit l'écran (TV / projecteur / laptop) */
+    html { font-size: clamp(13px, min(1.05vw, 1.85vh), 28px); background: var(--bg); }
+    body {
+      font-family: 'Outfit', system-ui, sans-serif; color: #e2e8f0; height: 100vh; overflow: hidden;
+      background:
+        radial-gradient(70rem 40rem at 105% -15%, rgba(167,139,250,.20), transparent 60%),
+        radial-gradient(60rem 40rem at -15% 115%, rgba(34,211,238,.15), transparent 60%),
+        var(--bg);
+    }
+    .glass { background: rgba(30,41,59,.55); border: 1px solid rgba(148,163,184,.14); backdrop-filter: blur(10px); }
+    .neon-v { text-shadow: 0 0 28px rgba(167,139,250,.7); }
+    .neon-c { text-shadow: 0 0 28px rgba(34,211,238,.75); }
+    .neon-p { text-shadow: 0 0 28px rgba(244,114,182,.75); }
+    .big-q { font-size: 2.6rem; line-height: 1.15; font-weight: 800; color: #fff; }
+    .kicker { font-size: .95rem; font-weight: 800; text-transform: uppercase; letter-spacing: .3em; }
+
+    @keyframes inRight { from { opacity:0; transform: translateX(60px) scale(.98); } to { opacity:1; transform:none; } }
+    @keyframes inLeft  { from { opacity:0; transform: translateX(-60px) scale(.98); } to { opacity:1; transform:none; } }
+    @keyframes floaty  { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-12px) } }
+    @keyframes pulseGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(52,211,153,.0) } 50% { box-shadow: 0 0 18px 2px rgba(52,211,153,.55) } }
+    @keyframes flash { 0% { filter: brightness(2.2) drop-shadow(0 0 30px #fff); transform: scale(1.18); } 100% { filter: none; transform: none; } }
+    @keyframes fall { to { transform: translate3d(var(--dx), 110vh, 0) rotate(var(--rot)); } }
+    @keyframes drum { 0%,100% { transform: rotate(-8deg) scale(1) } 50% { transform: rotate(8deg) scale(1.08) } }
+    @keyframes shimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }
+    @keyframes riseUp { from { transform: scaleY(0) } to { transform: scaleY(1) } }
+    @keyframes btnPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(251,191,36,.55) } 50% { box-shadow: 0 0 0 10px rgba(251,191,36,0) } }
+    .in-right { animation: inRight .45s cubic-bezier(.2,.8,.2,1) both; }
+    .in-left  { animation: inLeft  .45s cubic-bezier(.2,.8,.2,1) both; }
+    .floaty   { animation: floaty 3.2s ease-in-out infinite; }
+    .drum     { animation: drum .6s ease-in-out infinite; display: inline-block; }
+
+    .badge { padding: .25rem .8rem; border-radius: 999px; font-weight: 700; font-size: .85rem; border: 1px solid rgba(100,116,139,.5); color: #64748b; background: rgba(30,41,59,.6); transition: all .4s; }
+    .badge.ok { color: #a7f3d0; border-color: var(--green); background: rgba(52,211,153,.15); animation: pulseGlow 2.4s ease-in-out infinite; }
+
+    /* Révélations */
+    .rv { display: inline-grid; perspective: 600px; vertical-align: middle; }
+    .rv > span { grid-area: 1 / 1; transition: opacity .5s, transform .6s cubic-bezier(.2,.8,.2,1), filter .5s; backface-visibility: hidden; }
+    .rv .rv-val  { opacity: 0; transform: rotateX(90deg) scale(.85); filter: blur(10px); }
+    .rv .rv-mask { color: #64748b; letter-spacing: .1em; }
+    .rv.shown .rv-val  { opacity: 1; transform: none; filter: none; }
+    .rv.shown .rv-mask { opacity: 0; transform: rotateX(-90deg); }
+    .rv.flash .rv-val  { animation: flash .9s ease-out; }
+    .hide-until { opacity: 0; transform: translateY(20px) scale(.96); transition: opacity .7s, transform .8s cubic-bezier(.2,.8,.2,1); }
+    .hide-until.shown { opacity: 1; transform: none; }
+
+    .btn { border-radius: 1rem; padding: .9rem 1.6rem; font-weight: 800; font-size: 1.05rem; transition: transform .12s, filter .2s, opacity .2s; border: 2px solid transparent; }
+    .btn:hover { filter: brightness(1.15); }
+    .btn:active { transform: scale(.97); }
+    .btn[disabled] { opacity: .35; pointer-events: none; }
+    .btn-v { background: linear-gradient(135deg, #8b5cf6, #22d3ee); color: #0b1020; box-shadow: 0 10px 30px -10px rgba(139,92,246,.8); }
+    .btn-reveal { background: linear-gradient(135deg, #f59e0b, #f472b6); color: #1a0b12; animation: btnPulse 1.6s ease-in-out infinite; }
+    .btn-gold { background: rgba(251,191,36,.15); border-color: var(--gold); color: #fde68a; }
+    .btn-ghost { background: rgba(30,41,59,.8); border-color: rgba(71,85,105,.8); color: #cbd5e1; }
+    .btn-r { background: rgba(251,113,133,.15); border-color: var(--red); color: #fecdd3; }
+    .btn-c { background: rgba(34,211,238,.15); border-color: var(--cyan); color: #a5f3fc; }
+
+    .step-pill { font-size: .72rem; font-weight: 800; padding: .2rem .55rem; border-radius: .5rem; background: rgba(30,41,59,.9); color: #64748b; border: 1px solid rgba(71,85,105,.6); white-space: nowrap; }
+    .step-pill.done { background: rgba(52,211,153,.15); color: #6ee7b7; border-color: rgba(52,211,153,.5); }
+    .step-pill.next { background: rgba(251,191,36,.15); color: #fde68a; border-color: var(--gold); }
+
+    .avatar { display:grid; place-items:center; border-radius: 50%; font-weight: 900; color:#0b1020; background: linear-gradient(135deg, var(--violet), var(--cyan)); box-shadow: 0 0 40px rgba(167,139,250,.55); }
+
+    .gauge-a { background: linear-gradient(90deg, #0891b2, var(--cyan)); box-shadow: inset 0 0 30px rgba(255,255,255,.25), 0 0 40px rgba(34,211,238,.6); transition: width 2s cubic-bezier(.22,1,.36,1); }
+    .gauge-b { background: linear-gradient(90deg, var(--pink), #e11d48); box-shadow: inset 0 0 30px rgba(255,255,255,.2), 0 0 40px rgba(244,114,182,.6); }
+    .gauge-wait { background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.25) 50%, rgba(255,255,255,0) 100%); background-size: 200% 100%; animation: shimmer 1.6s linear infinite; }
+
+    .pod-col { border-radius: 1.4rem 1.4rem .6rem .6rem; display: flex; flex-direction: column; align-items: center; padding-top: 1rem; transform-origin: bottom; animation: riseUp .9s cubic-bezier(.2,.8,.2,1) both; }
+
+    .qq-ans { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 1rem; text-align: left; border-radius: 1rem; padding: .55rem 1.1rem; font-weight: 700; font-size: 1.2rem; line-height: 1.2; color: #e2e8f0; background: rgba(30,41,59,.75); border: 2px solid rgba(71,85,105,.6); transition: border-color .2s, box-shadow .2s, background .3s, transform .12s; }
+    .qq-ans:hover { transform: translateX(4px); }
+    .qq-txt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .qq-truth { flex-shrink: 0; font-weight: 900; color: #fde68a; font-size: 1.25rem; }
+    .qq-ans.linked { border-color: rgba(167,139,250,.85); }
+    .qq-ans.sel { border-color: var(--cyan); box-shadow: 0 0 0 2px var(--cyan), 0 0 28px rgba(34,211,238,.55); }
+    .qq-ans.ok { border-color: var(--green); background: rgba(52,211,153,.13); }
+    .qq-ans.ko { border-color: var(--red); background: rgba(251,113,133,.13); }
+    .qq-name { border-radius: 999px; padding: .5rem 1.2rem; font-weight: 900; font-size: 1.45rem; color: #94a3b8; background: rgba(30,41,59,.75); border: 2px solid rgba(71,85,105,.6); transition: all .2s; }
+    .qq-name:hover { color: #fff; }
+    .qq-name.linked { color: #fff; border-color: var(--violet); box-shadow: 0 0 18px rgba(167,139,250,.45); }
+    @keyframes draw { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
+    .qq-path.draw { stroke-dasharray: 1; animation: draw .7s ease-out both; }
+    .confetti { position: fixed; top: -20px; width: 12px; height: 18px; z-index: 100; pointer-events: none; border-radius: 3px; animation: fall linear forwards; }
+    #tools { transition: opacity .2s, transform .2s; }
+    #tools.hidden-panel { opacity: 0; transform: translateY(10px); pointer-events: none; }
+    kbd { font-family: inherit; font-size: .72rem; padding: .05rem .4rem; border-radius: .35rem; border: 1px solid #475569; background: #1e293b; color: #cbd5e1; }
+  </style>
+</head>
+
+<body class="antialiased flex flex-col">
+
+  <!-- ===== BARRE DU HAUT : statut des réponses en direct ===== -->
+  <header class="shrink-0 flex items-center justify-between gap-6 px-8 py-3 border-b border-slate-800/80 bg-[#0f172a]/70 backdrop-blur z-10">
+    <div class="flex items-center gap-3 min-w-0">
+      <span class="text-2xl">🎉</span>
+      <span id="appTitle" class="font-black text-lg tracking-wide text-white truncate"></span>
+      <span id="modePill" class="text-[.7rem] font-bold uppercase tracking-widest px-2 py-1 rounded-md"></span>
+    </div>
+    <div class="flex items-center gap-3">
+      <span class="text-sm text-slate-400 font-semibold whitespace-nowrap">Réponses <b id="respCount" class="text-white">0/0</b></span>
+      <div id="badges" class="flex flex-wrap gap-2 justify-end"></div>
+    </div>
+  </header>
+
+  <!-- ===== SCÈNE ===== -->
+  <main id="stage" class="flex-1 min-h-0 relative px-12 py-6"></main>
+
+  <!-- ===== BARRE DU BAS : navigation ===== -->
+  <footer class="shrink-0 flex items-center justify-between gap-4 px-8 py-3 border-t border-slate-800/80 bg-[#0f172a]/70 backdrop-blur z-10">
+    <button class="btn btn-ghost !py-2.5" id="prevBtn">◀ Précédent</button>
+    <div class="flex flex-col items-center gap-1.5 min-w-0">
+      <div id="phaseNav" class="flex gap-1.5"></div>
+      <div class="text-xs text-slate-400"><span id="slideInfo"></span> · <kbd>→</kbd>/<kbd>Espace</kbd> suivant · <kbd>←</kbd> retour · <kbd>Shift</kbd>+<kbd>→</kbd> sauter · <kbd>F</kbd> plein écran</div>
+    </div>
+    <div class="flex items-center gap-3">
+      <div id="stepPills" class="flex gap-1"></div>
+      <button class="btn btn-v !py-2.5 min-w-[13rem]" id="nextBtn">Suivant ▶</button>
+      <button class="w-11 h-11 rounded-full glass grid place-items-center text-lg hover:brightness-125" id="toolsBtn" title="Outils admin">⚙️</button>
+    </div>
+  </footer>
+
+  <!-- ===== PANNEAU OUTILS ADMIN ===== -->
+  <div id="tools" class="hidden-panel fixed right-6 bottom-20 z-50 w-[26rem] max-h-[80vh] overflow-y-auto glass rounded-2xl p-4 shadow-2xl bg-slate-900/95">
+    <div class="flex items-center justify-between mb-3">
+      <span class="font-black text-white">Outils admin</span>
+      <button class="text-slate-400 hover:text-white" id="toolsClose">✕</button>
+    </div>
+    <div id="toolsStatus" class="text-xs mb-3 p-2 rounded-lg bg-slate-800/80"></div>
+
+    <div class="mb-4">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm font-bold text-slate-200">🔗 Liens personnalisés</span>
+        <button class="btn btn-c !py-1 !px-3 !text-xs" data-tool="copyAll">Copier tous les liens</button>
+      </div>
+      <div id="linksList" class="grid gap-1.5"></div>
+      <p id="linksWarn" class="text-[11px] text-amber-300 mt-2"></p>
+    </div>
+
+    <div class="grid gap-2">
+      <button class="btn btn-c !py-2 !text-sm" data-tool="demo">🧪 Injecter Données Démo</button>
+      <button class="btn btn-ghost !py-2 !text-sm" data-tool="shuffle">🔀 Re-mélanger cartes / podiums / photos / bulletins</button>
+      <button class="btn btn-ghost !py-2 !text-sm" data-tool="resetReveals">🙈 Re-masquer toutes les révélations</button>
+      <button class="btn btn-ghost !py-2 !text-sm" data-tool="fullscreen">⛶ Plein écran</button>
+      <button class="btn btn-r !py-2 !text-sm" data-tool="reset">🗑️ Reset Database</button>
+    </div>
+    <p id="toolsMsg" class="text-xs text-emerald-300 mt-3 min-h-[1rem]"></p>
+  </div>
+
+<script>
+/* =====================================================================
+   LOGIQUE — admin.html (vue grand écran). Rien à modifier ici : tout
+   est dans config.js.
+   ===================================================================== */
+const C = CONFIG;
+const DOSSIER = C.dossierBase || 'soiree';
+const REF = DOSSIER + '/reponses';
+const REF_PHOTOS = DOSSIER + '/photos';
+const LOCAL_DB_KEY = 'soireeQuiz_localDB_' + DOSSIER;
+const LOCAL_PHOTO_KEY = 'soireeQuiz_localPhotos_' + DOSSIER;
+const PLAYER_URL = new URL('index.html', (C.urlSite || '').trim() || location.href).href;
+const linkFor = j => PLAYER_URL + '?user=' + encodeURIComponent(j);
+
+/* ---------- Utilitaires ---------- */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fbKey = s => String(s).replace(/[.#$/\[\]]/g, '_');
+const nameOf = k => C.joueurs.find(j => fbKey(j) === k) || k;
+const toArr = x => Array.isArray(x) ? x : (x && typeof x === 'object') ? Object.keys(x).sort((a, b) => a - b).map(k => x[k]) : [];
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const fill = (t, nom) => String(t || '').replace(/\{nom\}/g, nom);
+const hhmm = ts => ts ? new Date(ts).toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' }) : '';
+const rem = () => parseFloat(getComputedStyle(document.documentElement).fontSize);
+const LS = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} },
+};
+
+/* Petit contrôle de cohérence de config.js (visible dans la console F12) */
+C.duels.forEach((d, i) => [d.joueurA, d.joueurB].forEach(p => { if (!C.joueurs.includes(p)) console.warn(`config.js › duel ${i + 1} : "${p}" n'est pas dans la liste des joueurs`); }));
+
+/* ---------- Firebase ou mode local ---------- */
+function firebaseIsConfigured() {
+  if (typeof firebaseConfig === 'undefined' || !firebaseConfig) return false;
+  const { apiKey, databaseURL } = firebaseConfig;
+  if (!apiKey || !databaseURL) return false;
+  return !/COLLE_|ton-projet|XXXX/i.test(apiKey + ' ' + databaseURL);
+}
+let db = null, fbConnected = false;
+if (firebaseIsConfigured() && typeof firebase !== 'undefined') {
+  try { firebase.initializeApp(firebaseConfig); db = firebase.database(); }
+  catch (e) { console.error('Firebase init error', e); }
+}
+
+let R = {};   // réponses : { cléJoueur: {...} }
+let P = {};   // photos   : { cléJoueur: { joueur, data } }
+function subscribe() {
+  if (db) {
+    db.ref(REF).on('value', s => { R = s.val() || {}; onData(); }, err => { console.error(err); setStatus(); });
+    db.ref(REF_PHOTOS).on('value', s => { P = s.val() || {}; onData(); }, err => console.error(err));
+    db.ref('.info/connected').on('value', s => { fbConnected = !!s.val(); setStatus(); });
+  } else {
+    R = LS.get(LOCAL_DB_KEY) || {}; P = LS.get(LOCAL_PHOTO_KEY) || {};
+    window.addEventListener('storage', e => {
+      if (e.key === LOCAL_DB_KEY || e.key === LOCAL_PHOTO_KEY) { R = LS.get(LOCAL_DB_KEY) || {}; P = LS.get(LOCAL_PHOTO_KEY) || {}; onData(); }
+    });
+  }
+}
+async function writeAll(resp, photos) {
+  if (db) return Promise.all([db.ref(REF).set(resp), db.ref(REF_PHOTOS).set(photos)]);
+  LS.set(LOCAL_DB_KEY, resp); LS.set(LOCAL_PHOTO_KEY, photos); R = resp; P = photos; onData();
+}
+async function clearAll() {
+  if (db) return Promise.all([db.ref(REF).remove(), db.ref(REF_PHOTOS).remove()]);
+  LS.del(LOCAL_DB_KEY); LS.del(LOCAL_PHOTO_KEY); R = {}; P = {}; onData();
+}
+
+/* ---------- Calculs ---------- */
+const responses = () => Object.values(R).filter(r => r && r.joueur);
+const hasAnswered = j => !!R[fbKey(j)];
+const hasPhoto = j => !!(P[fbKey(j)] && P[fbKey(j)].data);
+
+function quiCounts(i) {
+  const c = Object.fromEntries(C.joueurs.map(j => [j, 0]));
+  responses().forEach(r => { const v = r.qui && r.qui['q' + i]; if (v != null) c[v] = (c[v] || 0) + 1; });
+  return Object.entries(c).sort((a, b) => b[1] - a[1]);
+}
+function duelCounts(i) {
+  let a = 0, b = 0;
+  responses().forEach(r => { const v = r.duels && r.duels['d' + i]; if (v === 'A') a++; else if (v === 'B') b++; });
+  return { a, b, t: a + b };
+}
+function qqAnswers(i) {
+  return responses().map(r => ({ id: fbKey(r.joueur), author: r.joueur, text: String((r.quiEstQui || {})['q' + i] || '').trim() })).filter(a => a.text);
+}
+function gageCards() {
+  // ⚠️ l'auteur n'est volontairement PAS conservé : anonymat total à l'écran
+  return responses().filter(r => r.gage && r.gage.cible && String(r.gage.texte || '').trim())
+    .map(r => ({ id: 'gage_' + fbKey(r.joueur), target: r.gage.cible, text: String(r.gage.texte).trim() }));
+}
+function tribunalCards() {
+  const out = [];
+  // ⚠️ l'auteur n'est volontairement PAS conservé : il ne doit jamais apparaître à l'écran
+  responses().forEach(r => {
+    const t = r.tribunal || {};
+    if (t.cible && String(t.texte || '').trim()) out.push({ id: 'card_' + fbKey(r.joueur), target: t.cible, text: String(t.texte).trim() });
+  });
+  return out;
+}
+function podiums() {
+  return responses().map(r => {
+    const t = r.top3 || {};
+    return { id: 'pod_' + fbKey(r.joueur), author: r.joueur, p: [t.top1 || '', t.top2 || '', t.top3 || ''].map(s => String(s).trim()) };
+  }).filter(p => p.p.some(Boolean));
+}
+function photos() {
+  return Object.entries(P).filter(([k, v]) => v && v.data).map(([k, v]) => ({ id: 'photo_' + k, author: v.joueur || nameOf(k), data: v.data }));
+}
+function bulletins() {
+  const out = [];
+  responses().forEach(r => ['plus', 'moins'].forEach(type => {
+    const v = r.conseil && r.conseil[type];
+    if (v && v.cible) out.push({ id: 'bul_' + fbKey(r.joueur) + '_' + type, vk: fbKey(r.joueur), type, target: v.cible, why: v.pourquoi || '' });
+    // ⚠️ l'auteur n'est volontairement PAS conservé ici : anonymat total à l'écran
+  }));
+  return out;
+}
+function conseilTotals() {
+  const plus = Object.fromEntries(C.joueurs.map(j => [j, 0])), moins = { ...plus };
+  bulletins().forEach(b => { const o = b.type === 'plus' ? plus : moins; o[b.target] = (o[b.target] || 0) + 1; });
+  const top = obj => { const max = Math.max(0, ...Object.values(obj)); return { max, who: max ? Object.keys(obj).filter(k => obj[k] === max) : [] }; };
+  return { plus, moins, boss: top(plus), loser: top(moins) };
+}
+
+/* ---------- Tribunal : même tirage secret que index.html ---------- */
+function xmur3(str) { let h = 1779033703 ^ str.length; for (let i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = h << 13 | h >>> 19; } return () => { h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); return (h ^= h >>> 16) >>> 0; }; }
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function secretAssignments(salt, avoid) {
+  const J = C.joueurs.slice();
+  const rnd = mulberry32(xmur3((C.graineTribunal || 'tribunal') + '|' + J.join(',') + (salt ? '|' + salt : ''))());
+  let fallback = null;
+  for (let tries = 0; tries < 5000; tries++) {
+    const p = J.slice();
+    for (let i = p.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+    if (!p.every((x, i) => x !== J[i])) continue;
+    const m = Object.fromEntries(J.map((j, i) => [j, p[i]]));
+    if (!avoid || J.every(j => m[j] !== avoid[j])) return m;
+    fallback = fallback || m;
+  }
+  return fallback || Object.fromEntries(J.map((j, i) => [j, J[(i + 1) % J.length]]));
+}
+function tribunalAssignments() { return secretAssignments('', null); }
+function gageAssignments() { return secretAssignments('gage', tribunalAssignments()); }
+
+/* ---------- Ordres aléatoires & révélations (conservés pendant la soirée) ---------- */
+const ORD = { trib: [], pod: [], photo: [], bul: [] };
+const REV = {};        // { slideId: { cle: true } }
+function syncOrder(name, ids) {
+  ORD[name] = ORD[name] || [];
+  const kept = ORD[name].filter(id => ids.includes(id));
+  const fresh = shuffle(ids.filter(id => !kept.includes(id)));
+  ORD[name] = kept.concat(fresh);
+  return ORD[name];
+}
+const isRev = (sid, k) => !!(REV[sid] && REV[sid][k]);
+
+/* ---------- Construction des slides ----------
+   Chaque slide peut avoir des "steps" : révélations qui se déclenchent
+   TOUJOURS dans le même ordre avec le même bouton (Suivant / → / Espace). */
+let slides = [], cur = 0, dir = 1, charts = [];
+const PHASES = ['Accueil', 'Qui est le plus…', 'Face-à-Face', 'Qui est qui ?', 'Le Tribunal', 'Un gage ou t\'affonnes', 'Top 3 Liégeois', 'Photo Roulette', 'Conseil de Tribu'];
+const NB_PHASES = PHASES.length - 1;
+const RESULT = [{ k: 'result', label: 'Résultat' }];
+
+function buildSlides() {
+  const S = [];
+  S.push({ id: 'intro', phase: 0, render: rIntro, update: rIntro });
+
+  S.push(phaseSlide(1, '📊', 'Les votes de la meute. Aucune pitié, aucun recours.'));
+  C.quiEstLePlus.forEach((q, i) => S.push({ id: 'qui' + i, phase: 1, steps: RESULT, render: el => rQui(el, i), onReveal: el => showQui(el, i, true), update: el => uQui(el, i) }));
+
+  S.push(phaseSlide(2, '🥊', 'Deux noms. Un seul gagnant. La table a tranché.'));
+  C.duels.forEach((d, i) => S.push({ id: 'duel' + i, phase: 2, steps: RESULT, render: el => rDuel(el, i), onReveal: el => uDuel(el, i), update: el => { if (isRev('duel' + i, 'result')) uDuel(el, i); else waitDuel(el, i); } }));
+
+  S.push(phaseSlide(3, '🔗', 'Chacun a répondu sur lui-même. À vous de relier chaque réponse à la bonne personne.'));
+  C.quiEstQui.forEach((q, i) => {
+    const ans = qqAnswers(i), aMap = Object.fromEntries(ans.map(a => [a.id, a]));
+    const items = syncOrder('qq' + i, ans.map(a => a.id)).map(id => aMap[id]);
+    S.push({ id: 'qq' + i, phase: 3, steps: [{ k: 'guess', label: 'Guess' }, { k: 'fix', label: 'Correction' }], render: el => rQQ(el, i, items), onReveal: (el, k) => qqPaint(el, k) });
+  });
+  S.push({ id: 'qqbilan', phase: 3, render: rQQBilan });
+
+  const cards = tribunalCards(), cMap = Object.fromEntries(cards.map(c => [c.id, c]));
+  const cOrder = syncOrder('trib', cards.map(c => c.id));
+  S.push(phaseSlide(4, '⚖️', 'Chacun a écrit une vérité à une cible tirée au sort. On lit, on devine à qui elle est destinée… L\'auteur, lui, restera un mystère.', () => `
+      <div class="mt-10 flex items-center gap-4 justify-center">
+        <span class="glass rounded-xl px-5 py-3 font-bold">${cards.length} carte(s) au dossier</span>
+        <button class="btn btn-gold" data-do="shuffle:trib">🔀 Mélanger les cartes</button>
+      </div>`));
+  if (!cOrder.length) S.push(emptySlide('trib-empty', 4, 'Aucune carte pour l\'instant…'));
+  cOrder.forEach((id, k) => S.push({ id, phase: 4, steps: [{ k: 'target', label: 'Destinataire' }], render: el => rCard(el, cMap[id], k, cOrder.length) }));
+
+  const gages = gageCards(), gMap = Object.fromEntries(gages.map(c => [c.id, c]));
+  const gOrder = syncOrder('gage', gages.map(c => c.id));
+  S.push(phaseSlide(5, '🍺', 'Un nom à l\'écran, puis un gage anonyme. Pas cap ? T\'affonnes.', () => `
+      <div class="mt-8 text-[2.6rem] font-black text-amber-300 animate-pulse">🍺 Tout le monde remplit sa bière ! 🍺</div>
+      <div class="mt-8 flex items-center gap-4 justify-center">
+        <span class="glass rounded-xl px-5 py-3 font-bold">${gages.length} gage(s)</span>
+        <button class="btn btn-gold" data-do="shuffle:gage">🔀 Mélanger l'ordre</button>
+      </div>`));
+  if (!gOrder.length) S.push(emptySlide('gage-empty', 5, 'Aucun gage pour l\'instant…'));
+  gOrder.forEach((id, k) => S.push({ id, phase: 5, steps: [{ k: 'gage', label: 'Gage' }], render: el => rGage(el, gMap[id], k, gOrder.length) }));
+
+  const pods = podiums(), pMap = Object.fromEntries(pods.map(p => [p.id, p]));
+  const pOrder = syncOrder('pod', pods.map(p => p.id));
+  S.push(phaseSlide(6, '🏆', 'Un podium. Un auteur caché. À vous de deviner qui a ces goûts-là.', () => `
+      <div class="mt-10 flex items-center gap-4 justify-center">
+        <span class="glass rounded-xl px-5 py-3 font-bold">${pods.length} podium(s)</span>
+        <button class="btn btn-gold" data-do="shuffle:pod">🔀 Mélanger l'ordre</button>
+      </div>`));
+  if (!pOrder.length) S.push(emptySlide('pod-empty', 6, 'Aucun podium pour l\'instant…'));
+  pOrder.forEach((id, k) => S.push({ id, phase: 6, steps: [{ k: 'p3', label: 'Top 3' }, { k: 'p2', label: 'Top 2' }, { k: 'p1', label: 'Top 1' }, { k: 'author', label: 'Auteur' }], render: el => rPodium(el, pMap[id], k, pOrder.length) }));
+
+  const phs = photos(), phMap = Object.fromEntries(phs.map(p => [p.id, p]));
+  const phOrder = syncOrder('photo', phs.map(p => p.id));
+  S.push(phaseSlide(7, '📸', 'Une photo à l\'écran. Qui l\'a postée ? Débattez, votez, puis on révèle.', () => `
+      <div class="mt-10 flex items-center gap-4 justify-center">
+        <span class="glass rounded-xl px-5 py-3 font-bold">${phs.length} photo(s)</span>
+        <button class="btn btn-gold" data-do="shuffle:photo">🔀 Mélanger l'ordre</button>
+      </div>`));
+  if (!phOrder.length) S.push(emptySlide('photo-empty', 7, 'Aucune photo pour l\'instant…'));
+  phOrder.forEach((id, k) => S.push({ id, phase: 7, steps: [{ k: 'author', label: 'Auteur' }], render: el => rPhoto(el, phMap[id], k, phOrder.length) }));
+
+  const buls = bulletins(), bMap = Object.fromEntries(buls.map(b => [b.id, b]));
+  // Ordre : électeurs mélangés, et pour chaque électeur (anonyme) : son vote + puis son vote −
+  const voters = syncOrder('bul', [...new Set(buls.map(b => b.vk))]);
+  const bOrder = [], bVoter = {};
+  voters.forEach((vk, vi) => ['plus', 'moins'].forEach(type => { const id = 'bul_' + vk + '_' + type; if (bMap[id]) { bOrder.push(id); bVoter[id] = vi + 1; } }));
+  S.push(phaseSlide(8, '🔥', 'Le dépouillement. Les votes sont anonymes… et définitifs.', () => `
+      <div class="mt-10 flex items-center gap-4 justify-center flex-wrap">
+        <span class="glass rounded-xl px-5 py-3 font-bold">${buls.length} bulletin(s)</span>
+        <span class="glass rounded-xl px-5 py-3 font-bold">Électeur après électeur : son vote + puis son vote −</span>
+        <button class="btn btn-gold" data-do="shuffle:bul">🔀 Mélanger les électeurs</button>
+      </div>`));
+  if (!bOrder.length) S.push(emptySlide('bul-empty', 8, 'Aucun bulletin pour l\'instant…'));
+  bOrder.forEach((id, k) => S.push({ id, phase: 8, steps: [{ k: 'target', label: 'Nom' }, { k: 'why', label: 'Justification' }], render: el => rBulletin(el, bMap[id], bVoter[id], voters.length) }));
+  S.push({ id: 'final', phase: 8, steps: [{ k: 'loser', label: 'Grand Perdant' }, { k: 'boss', label: 'Boss' }], render: rFinal, onReveal: (el, k) => { if (k === 'boss') confetti(); else confetti(['#fb7185', '#64748b', '#1e293b', '#f43f5e'], 80); } });
+  S.push({ id: 'scores', phase: 8, render: rScores });
+
+  slides = S;
+}
+
+function phaseSlide(n, emoji, sub, extra) {
+  return {
+    id: 'phase' + n, phase: n,
+    render: el => {
+      el.innerHTML = `
+        <div class="h-full flex flex-col items-center justify-center text-center">
+          <div class="text-[7rem] leading-none floaty">${emoji}</div>
+          <p class="kicker text-violet-300 mt-8">Phase ${n} / ${NB_PHASES}</p>
+          <h1 class="text-[5.5rem] leading-none font-black text-white neon-v mt-3">${esc(PHASES[n])}</h1>
+          <p class="text-2xl text-slate-300 mt-6 max-w-4xl">${esc(sub)}</p>
+          ${extra ? extra() : ''}
+        </div>`;
+    },
+  };
+}
+function emptySlide(id, phase, txt) {
+  return { id, phase, render: el => { el.innerHTML = `<div class="h-full grid place-items-center text-center"><div><div class="text-7xl mb-6">🕸️</div><p class="text-3xl text-slate-400">${esc(txt)}</p><p class="text-slate-500 mt-3">Les données arrivent en direct dès qu'un joueur envoie ses réponses.</p></div></div>`; } };
+}
+const header = (kicker, color, right = '') => `
+  <div class="flex items-start justify-between gap-6 shrink-0">
+    <p class="kicker ${color}">${kicker}</p>${right}
+  </div>`;
+const rv = (sid, key, val, cls = '') => `<span class="rv ${isRev(sid, key) ? 'shown' : ''} ${cls}" data-rv="${key}"><span class="rv-mask">???</span><span class="rv-val">${esc(val)}</span></span>`;
+const drumroll = (txt) => `<div class="h-full grid place-items-center text-center" data-wait><div><div class="text-[6rem] leading-none drum">🥁</div><p class="text-2xl text-slate-400 mt-6">${txt}</p></div></div>`;
+
+/* ----- Accueil : suivi des réponses ----- */
+function rIntro(el) {
+  const n = C.joueurs.filter(hasAnswered).length;
+  el.innerHTML = `
+    <div class="h-full flex flex-col overflow-y-auto">
+      <p class="kicker text-cyan-300">Ce soir</p>
+      <h1 class="text-[4.6rem] leading-[1.02] font-black text-white neon-v mt-3">${esc(C.titreSoiree)}</h1>
+      <div class="flex flex-wrap gap-3 mt-6">
+        ${PHASES.slice(1).map((p, i) => `<span class="glass rounded-xl px-4 py-2 font-semibold text-slate-200"><span class="text-violet-300">${i + 1}.</span> ${esc(p)}</span>`).join('')}
+      </div>
+      <div class="mt-10 flex items-baseline gap-4">
+        <h2 class="text-3xl font-black text-white">Suivi des réponses</h2>
+        <span class="text-xl text-slate-400"><b class="text-white text-3xl">${n}</b> / ${C.joueurs.length} ont envoyé</span>
+      </div>
+      <div class="grid grid-cols-4 gap-4 mt-5">
+        ${C.joueurs.map(j => {
+          const r = R[fbKey(j)], ok = !!r, ph = hasPhoto(j);
+          return `
+          <div class="rounded-2xl p-5 border-2 ${ok ? 'border-emerald-400/70 bg-emerald-400/10' : 'border-slate-700 bg-slate-800/40'}">
+            <div class="flex items-center justify-between">
+              <span class="text-2xl font-black ${ok ? 'text-white' : 'text-slate-400'}">${esc(j)}</span>
+              <span class="text-2xl">${ok ? '✅' : '⏳'}</span>
+            </div>
+            <p class="text-sm mt-2 ${ok ? 'text-emerald-300' : 'text-slate-500'}">${ok ? 'Envoyé à ' + hhmm(r.envoyeLe) : 'Pas encore répondu'}</p>
+            <p class="text-sm mt-1 ${ph ? 'text-cyan-300' : 'text-slate-500'}">${ph ? '📸 Photo reçue' : '📷 Pas de photo'}</p>
+          </div>`;
+        }).join('')}
+      </div>
+      <p class="text-slate-500 mt-6 text-sm">Les liens personnalisés à envoyer à chacun sont dans ⚙️ (en bas à droite). Cette page se met à jour toute seule.</p>
+    </div>`;
+}
+
+/* ----- Phase 1 : histogrammes (question → puis résultat) ----- */
+const valueLabels = {
+  id: 'valueLabels',
+  afterDatasetsDraw(chart) {
+    const { ctx } = chart, fs = Math.round(rem() * 1.6);
+    chart.getDatasetMeta(0).data.forEach((bar, i) => {
+      const v = chart.data.datasets[0].data[i]; if (!v) return;
+      ctx.save(); ctx.fillStyle = '#fff'; ctx.font = `900 ${fs}px Outfit, sans-serif`; ctx.textAlign = 'center';
+      ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 8;
+      ctx.fillText(v, bar.x, bar.y - 12); ctx.restore();
+    });
+  },
+};
+function quiData(i) {
+  const e = quiCounts(i), max = e.length ? e[0][1] : 0;
+  return { labels: e.map(x => x[0]), data: e.map(x => x[1]), colors: e.map(x => max && x[1] === max ? '#f472b6' : 'rgba(167,139,250,.65)'), borders: e.map(x => max && x[1] === max ? '#fbcfe8' : '#a78bfa'), total: e.reduce((s, x) => s + x[1], 0), max };
+}
+function rQui(el, i) {
+  const sid = 'qui' + i;
+  el.innerHTML = `
+    <div class="h-full flex flex-col">
+      ${header(`Qui est le plus… · Question ${i + 1} / ${C.quiEstLePlus.length}`, 'text-violet-300', `<span class="text-slate-400 font-semibold text-lg" data-total></span>`)}
+      <h2 class="big-q mt-3 max-w-6xl shrink-0">${esc(C.quiEstLePlus[i])}</h2>
+      <div class="relative flex-1 min-h-0 mt-6" data-chartbox>${drumroll('Qui la meute a-t-elle désigné ?')}</div>
+    </div>`;
+  $('[data-total]', el).textContent = `${quiData(i).total} vote(s)`;
+  if (isRev(sid, 'result')) showQui(el, i, false);
+}
+function showQui(el, i, anim) {
+  const box = $('[data-chartbox]', el);
+  box.innerHTML = '<canvas></canvas>';
+  const d = quiData(i), r = rem();
+  const ch = new Chart($('canvas', box), {
+    type: 'bar', plugins: [valueLabels],
+    data: { labels: d.labels, datasets: [{ data: d.data, backgroundColor: d.colors, borderColor: d.borders, borderWidth: 2, borderRadius: 14, borderSkipped: false, maxBarThickness: 140 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: anim ? { duration: 1800, easing: 'easeOutQuart' } : false,
+      layout: { padding: { top: r * 2.4 } },
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: {
+        x: { grid: { display: false }, border: { display: false }, ticks: { color: '#f1f5f9', font: { family: 'Outfit', size: r * 1.5, weight: '800' } } },
+        y: { beginAtZero: true, suggestedMax: Math.max(3, d.max + 1), grid: { color: 'rgba(148,163,184,.12)' }, border: { display: false }, ticks: { stepSize: 1, precision: 0, color: '#64748b', font: { family: 'Outfit', size: r } } },
+      },
+    },
+  });
+  charts.push(ch); el._chart = ch;
+}
+function uQui(el, i) {
+  const d = quiData(i);
+  $('[data-total]', el).textContent = `${d.total} vote(s)`;
+  const ch = el._chart; if (!ch) return;
+  ch.data.labels = d.labels; Object.assign(ch.data.datasets[0], { data: d.data, backgroundColor: d.colors, borderColor: d.borders });
+  ch.options.scales.y.suggestedMax = Math.max(3, d.max + 1); ch.update();
+}
+
+/* ----- Phase 2 : jauges duel (question → puis résultat) ----- */
+function rDuel(el, i) {
+  const d = C.duels[i];
+  el.innerHTML = `
+    <div class="h-full flex flex-col">
+      ${header(`Face-à-Face · Duel ${i + 1} / ${C.duels.length}`, 'text-pink-300', `<span class="text-slate-400 font-semibold text-lg" data-total></span>`)}
+      <h2 class="big-q mt-3 max-w-6xl">${esc(d.question)}</h2>
+      <div class="flex-1 flex flex-col justify-center">
+        <div class="flex items-end justify-between mb-6">
+          <div>
+            <div class="text-[4.5rem] font-black text-cyan-300 neon-c leading-none"><span data-crown-a></span>${esc(d.joueurA)}</div>
+            <div class="text-[3.4rem] font-black text-white tabular-nums mt-2" data-pa>?</div>
+          </div>
+          <div class="text-6xl pb-6" data-vs>🥊</div>
+          <div class="text-right">
+            <div class="text-[4.5rem] font-black text-pink-300 neon-p leading-none">${esc(d.joueurB)}<span data-crown-b></span></div>
+            <div class="text-[3.4rem] font-black text-white tabular-nums mt-2" data-pb>?</div>
+          </div>
+        </div>
+        <div class="relative h-28 rounded-full overflow-hidden flex bg-slate-800 border-2 border-slate-700">
+          <div class="gauge-a h-full" data-ga style="width:50%"></div>
+          <div class="gauge-b h-full flex-1"></div>
+          <div class="absolute inset-0 gauge-wait" data-shimmer></div>
+          <div class="absolute inset-y-0 left-1/2 w-1 -ml-0.5 bg-white/80 shadow-[0_0_20px_#fff]"></div>
+        </div>
+        <div class="flex justify-between text-xl text-slate-400 font-semibold mt-4"><span data-ca></span><span data-wait class="text-slate-500"></span><span data-cb></span></div>
+      </div>
+    </div>`;
+  if (isRev('duel' + i, 'result')) { $('[data-ga]', el).style.transition = 'none'; uDuel(el, i); requestAnimationFrame(() => { const g = $('[data-ga]', el); if (g) g.style.transition = ''; }); }
+  else waitDuel(el, i);
+}
+function waitDuel(el, i) {
+  const { t } = duelCounts(i);
+  $('[data-total]', el).textContent = `${t} vote(s)`;
+  $('[data-wait]', el).textContent = 'Qui l\'emporte ?';
+}
+function uDuel(el, i) {
+  const { a, b, t } = duelCounts(i);
+  const pa = t ? Math.round(a / t * 100) : 50, pb = 100 - pa;
+  $('[data-shimmer]', el)?.remove();
+  $('[data-ga]', el).style.width = pa + '%';
+  $('[data-pa]', el).textContent = t ? pa + '%' : '–';
+  $('[data-pb]', el).textContent = t ? pb + '%' : '–';
+  $('[data-ca]', el).textContent = t ? `${a} vote(s)` : '';
+  $('[data-cb]', el).textContent = t ? `${b} vote(s)` : '';
+  $('[data-wait]', el).textContent = t ? (a === b ? 'ÉGALITÉ !' : '') : 'Aucun vote';
+  $('[data-total]', el).textContent = `${t} vote(s)`;
+  $('[data-crown-a]', el).textContent = t && a > b ? '👑 ' : '';
+  $('[data-crown-b]', el).textContent = t && b > a ? ' 👑' : '';
+}
+
+/* ----- Phase 3 : Qui est qui ? (relier réponse ↔ prénom, Guess, Correction) ----- */
+const QQ_LINKS = {};   // { slideId: { idRéponse: prénomChoisi } }
+let qqSel = null;      // réponse sélectionnée, en attente d'un prénom
+let qqLast = null;     // dernier lien posé (pour l'animer)
+// Une couleur par prénom pour bien distinguer les liens avant le Guess
+const QQ_COLORS = ['#22d3ee', '#f472b6', '#fbbf24', '#a3e635', '#a78bfa', '#fb923c', '#60a5fa', '#f87171', '#2dd4bf', '#e879f9'];
+const qqColor = (names, name) => QQ_COLORS[Math.max(0, names.indexOf(name)) % QQ_COLORS.length];
+const qqScore = (sid, items) => items.filter(a => (QQ_LINKS[sid] || {})[a.id] === a.author).length;
+
+function rQQ(el, i, items) {
+  const q = C.quiEstQui[i], sid = 'qq' + i;
+  const names = C.joueurs.filter(j => items.some(a => a.author === j));
+  el._qq = { sid, items, names };
+  el.innerHTML = `
+    <div class="h-full flex flex-col">
+      ${header(`Qui est qui ? · Manche ${i + 1} / ${C.quiEstQui.length}`, 'text-cyan-300', `<span data-qqscore class="text-3xl font-black"></span>`)}
+      <h2 class="big-q mt-2 shrink-0">${esc(q.titre || q.question)}</h2>
+      <p class="text-slate-400 mt-1 text-lg shrink-0" data-qqhint></p>
+      ${items.length ? `
+      <div class="relative flex-1 min-h-0 mt-3" data-qqbox>
+        <svg class="absolute inset-0 w-full h-full pointer-events-none" style="overflow:visible"></svg>
+        <div class="relative h-full flex justify-between gap-8">
+          <div class="w-[52%] flex flex-col justify-center gap-[.6rem]">
+            ${items.map(a => `<button class="qq-ans" data-ans="${a.id}"><span class="qq-txt">${esc(a.text)}</span><span class="qq-truth" data-truth></span></button>`).join('')}
+          </div>
+          <div class="w-[16rem] flex flex-col justify-center gap-[.6rem]">
+            ${names.map((n, k) => `<button class="qq-name" data-pname="${k}">${esc(n)}</button>`).join('')}
+          </div>
+        </div>
+      </div>` : `<div class="flex-1 grid place-items-center text-3xl text-slate-500">Aucune réponse pour l'instant…</div>`}
+    </div>`;
+  requestAnimationFrame(() => qqPaint(el));
+}
+
+function qqPaint(el, animStep) {
+  const Q = el && el._qq; if (!Q) return;
+  const box = $('[data-qqbox]', el); if (!box) return;
+  const { sid, items, names } = Q, L = QQ_LINKS[sid] || {};
+  const guessed = isRev(sid, 'guess'), fixed = isRev(sid, 'fix');
+  const ok = qqScore(sid, items);
+  // Réponses
+  items.forEach(a => {
+    const b = $(`[data-ans="${a.id}"]`, box), good = L[a.id] === a.author;
+    b.className = 'qq-ans' + (qqSel === a.id ? ' sel' : '') + (L[a.id] ? ' linked' : '') + (guessed ? (good ? ' ok' : ' ko') : '');
+    const tr = $('[data-truth]', b);
+    tr.textContent = fixed && !good ? '→ ' + a.author : guessed ? (good ? '✅' : '❌') : '';
+    tr.style.color = fixed && !good ? qqColor(names, a.author) : '';
+    const c = !guessed && L[a.id] && qqSel !== a.id ? qqColor(names, L[a.id]) : '';
+    b.style.borderColor = c; b.style.boxShadow = c ? `0 0 16px ${c}55` : '';
+  });
+  // Prénoms
+  const used = new Set(fixed ? items.map(a => a.author) : Object.values(L));
+  $$('[data-pname]', box).forEach(b => {
+    const n = names[+b.dataset.pname], on = used.has(n);
+    b.classList.toggle('linked', on);
+    const c = on && (!guessed || fixed) ? qqColor(names, n) : '';
+    b.style.borderColor = c; b.style.boxShadow = c ? `0 0 18px ${c}66` : ''; b.style.color = c ? '#fff' : '';
+  });
+  // Lignes
+  const br = box.getBoundingClientRect(), svg = $('svg', box);
+  svg.innerHTML = items.map(a => {
+    const target = fixed ? a.author : L[a.id]; if (!target) return '';
+    const good = L[a.id] === a.author;
+    const color = fixed ? qqColor(names, target) : guessed ? (good ? '#34d399' : '#fb7185') : qqColor(names, target);
+    const ar = $(`[data-ans="${a.id}"]`, box).getBoundingClientRect();
+    const nb = $(`[data-pname="${names.indexOf(target)}"]`, box); if (!nb) return '';
+    const nr = nb.getBoundingClientRect();
+    const x1 = ar.right - br.left, y1 = ar.top + ar.height / 2 - br.top, x2 = nr.left - br.left, y2 = nr.top + nr.height / 2 - br.top, mx = (x1 + x2) / 2;
+    const anim = (animStep === 'fix' && !good) || (!animStep && qqLast === a.id && !guessed);
+    return `<path class="qq-path ${anim ? 'draw' : ''}" pathLength="1" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" stroke="${color}" stroke-width="4" fill="none" stroke-linecap="round" style="filter:drop-shadow(0 0 6px ${color})"/>
+            <circle cx="${x1}" cy="${y1}" r="6" fill="${color}"/><circle cx="${x2}" cy="${y2}" r="6" fill="${color}"/>`;
+  }).join('');
+  qqLast = null;
+  // Score + consigne
+  const sc = $('[data-qqscore]', el), hint = $('[data-qqhint]', el);
+  if (guessed) { sc.textContent = `Score : ${ok} / ${items.length}`; sc.className = 'text-3xl font-black ' + (ok / items.length >= .6 ? 'text-emerald-300' : ok / items.length >= .3 ? 'text-amber-300' : 'text-rose-300'); }
+  else sc.textContent = '';
+  const nLinks = Object.keys(L).length;
+  hint.textContent = fixed ? 'La vérité, rien que la vérité 👇'
+    : guessed ? `${ok} bonne(s) réponse(s) sur ${items.length} ! Appuie encore pour voir la correction.`
+    : `Clique sur une réponse, puis sur un prénom pour les relier · ${nLinks} / ${items.length} lien(s)`;
+}
+
+function qqClick(t) {
+  const sl = slides[cur]; if (!sl || !/^qq\d+$/.test(sl.id) || isRev(sl.id, 'guess')) return false;
+  const el = stage._slideEl, Q = el && el._qq; if (!Q) return false;
+  const L = QQ_LINKS[sl.id] = QQ_LINKS[sl.id] || {};
+  const ans = t.closest('[data-ans]'), nm = t.closest('[data-pname]');
+  if (ans) { qqSel = qqSel === ans.dataset.ans ? null : ans.dataset.ans; qqPaint(el, 'none'); return true; }
+  if (nm) {
+    const name = Q.names[+nm.dataset.pname];
+    if (qqSel) {
+      Object.keys(L).forEach(k => { if (L[k] === name) delete L[k]; });   // 1 prénom = 1 seule réponse
+      L[qqSel] = name; qqLast = qqSel; qqSel = null; qqPaint(el);
+    } else {
+      Object.keys(L).forEach(k => { if (L[k] === name) delete L[k]; });   // clic sur un prénom relié = on défait le lien
+      qqPaint(el, 'none');
+    }
+    return true;
+  }
+  return false;
+}
+
+function rQQBilan(el) {
+  const rounds = C.quiEstQui.map((q, i) => { const items = qqAnswers(i), sid = 'qq' + i; return { q, played: isRev(sid, 'guess'), ok: qqScore(sid, items), n: items.length }; });
+  const played = rounds.filter(r => r.played), ok = played.reduce((s, r) => s + r.ok, 0), n = played.reduce((s, r) => s + r.n, 0);
+  const pct = n ? ok / n : 0;
+  const verdict = !n ? 'Jouez les manches d\'abord 😉' : pct >= .7 ? 'Vous vous connaissez par cœur 🫶' : pct >= .4 ? 'Pas mal… mais y a encore du boulot 🤔' : 'Bande d\'inconnus 🤡';
+  el.innerHTML = `
+    <div class="h-full flex flex-col">
+      ${header('Qui est qui ? · Le bilan', 'text-cyan-300')}
+      <div class="flex-1 min-h-0 grid grid-cols-2 gap-12 items-center">
+        <div class="text-center">
+          <p class="text-2xl text-slate-400">La table a trouvé</p>
+          <p class="text-[9rem] leading-none font-black text-white neon-c mt-4">${ok}<span class="text-slate-500 text-[5rem]"> / ${n}</span></p>
+          <p class="text-4xl font-black mt-6 ${pct >= .7 ? 'text-emerald-300' : pct >= .4 ? 'text-amber-300' : 'text-rose-300'}">${verdict}</p>
+        </div>
+        <div class="space-y-3">
+          ${rounds.map(r => `
+            <div class="glass rounded-xl px-5 py-4 flex items-center justify-between">
+              <span class="text-xl font-bold text-slate-200">${esc(r.q.titre || r.q.question)}</span>
+              <span class="text-2xl font-black ${r.played ? 'text-white' : 'text-slate-600'}">${r.played ? `${r.ok} / ${r.n}` : '—'}</span>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ----- Phase 4 : Tribunal ----- */
+function rCard(el, c, k, n) {
+  const sid = c.id, len = c.text.length;
+  const fs = len > 220 ? '2.2rem' : len > 120 ? '2.9rem' : len > 60 ? '3.6rem' : '4.4rem';
+  el.innerHTML = `
+    <div class="h-full flex flex-col">
+      ${header(`Le Tribunal · Carte ${k + 1} / ${n}`, 'text-amber-300', `<span class="text-slate-500 text-lg">🔒 Auteur anonyme</span>`)}
+      <div class="flex-1 min-h-0 flex flex-col items-center justify-center">
+        <div class="relative w-full max-w-6xl rounded-[2.2rem] px-14 py-14 glass border-2 !border-amber-300/40 shadow-[0_0_80px_-20px_rgba(251,191,36,.45)]">
+          <div class="absolute -top-10 left-10 text-[8rem] leading-none text-amber-300/70 font-black select-none">“</div>
+          <p class="font-bold text-white leading-snug text-center" style="font-size:${fs}">${esc(c.text)}</p>
+        </div>
+        <div class="mt-10 rounded-2xl bg-slate-900/70 px-16 py-6 text-center border-2 border-cyan-400/40 shadow-[0_0_60px_-20px_rgba(34,211,238,.6)]">
+          <span class="text-slate-400 text-xl block mb-2">🎯 Cette vérité est destinée à…</span>
+          ${rv(sid, 'target', c.target, 'text-cyan-300 text-[5rem] leading-none font-black neon-c')}
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ----- Phase 5 : Un gage ou t'affonnes ----- */
+function rGage(el, c, k, n) {
+  const sid = c.id, len = c.text.length, shown = isRev(sid, 'gage');
+  const fs = len > 140 ? '2.3rem' : len > 70 ? '3rem' : '3.7rem';
+  el.innerHTML = `
+    <div class="h-full flex flex-col">
+      ${header(`Un gage ou t'affonnes · Gage ${k + 1} / ${n}`, 'text-orange-300', `<span class="text-slate-500 text-lg">🔒 Auteur anonyme</span>`)}
+      <div class="flex-1 min-h-0 flex flex-col items-center justify-center text-center">
+        <p class="text-2xl text-slate-400">🎯 Gage pour</p>
+        <div class="flex items-center gap-6 mt-3">
+          <div class="avatar w-24 h-24 text-5xl">${esc(c.target.slice(0, 1).toUpperCase())}</div>
+          <h2 class="text-[6rem] leading-none font-black text-white neon-v">${esc(c.target)}</h2>
+        </div>
+        <div class="mt-10 w-full max-w-6xl rounded-[2.2rem] px-14 py-10 glass border-2 !border-orange-400/50 shadow-[0_0_80px_-20px_rgba(251,146,60,.6)] min-h-[10rem] grid place-items-center">
+          ${rv(sid, 'gage', c.text, 'font-bold text-white leading-snug')}
+        </div>
+        <p class="hide-until ${shown ? 'shown' : ''} mt-8 text-[2.6rem] font-black text-amber-300" data-rv="gage">Pas cap ? 🍺 T'AFFONNES !</p>
+      </div>
+    </div>`;
+  const v = $('.rv .rv-val', el); if (v) v.style.fontSize = fs;
+  const m = $('.rv .rv-mask', el); if (m) m.style.fontSize = '4rem';
+}
+
+/* ----- Phase 6 : Podiums (escalier : Top 3 → Top 2 → Top 1) ----- */
+function rPodium(el, p, k, n) {
+  const sid = p.id;
+  const col = (rank, h, cls, medal) => `
+    <div class="flex flex-col items-center justify-end w-1/3">
+      <div class="text-center mb-4 min-h-[4.5rem] flex items-end justify-center px-2">${rv(sid, 'p' + rank, p.p[rank - 1] || '(vide)', 'text-[2.3rem] font-black text-white leading-tight break-all')}</div>
+      <div class="pod-col w-full ${cls}" style="height:${h}">
+        <span class="text-5xl">${medal}</span>
+        <span class="text-5xl font-black text-white/90 mt-1">${rank}</span>
+      </div>
+    </div>`;
+  el.innerHTML = `
+    <div class="h-full flex flex-col">
+      ${header(`Top 3 Liégeois · Podium ${k + 1} / ${n}`, 'text-fuchsia-300', `<div class="text-3xl font-bold text-slate-300">Auteur : ${rv(sid, 'author', p.author, 'text-pink-300 font-black text-4xl')}</div>`)}
+      <div class="flex-1 min-h-0 flex items-end justify-center gap-5 max-w-6xl w-full mx-auto mt-4">
+        ${col(3, '9rem', 'bg-gradient-to-b from-orange-400/40 to-orange-700/10 border-2 border-orange-400/50', '🥉')}
+        ${col(2, '14rem', 'bg-gradient-to-b from-slate-300/40 to-slate-500/10 border-2 border-slate-300/50', '🥈')}
+        ${col(1, '19rem', 'bg-gradient-to-b from-amber-300/45 to-amber-600/10 border-2 border-amber-300/70 shadow-[0_0_60px_-10px_rgba(251,191,36,.6)]', '🥇')}
+      </div>
+    </div>`;
+}
+
+/* ----- Phase 7 : Photo Roulette ----- */
+function rPhoto(el, p, k, n) {
+  const sid = p.id;
+  el.innerHTML = `
+    <div class="h-full flex flex-col">
+      ${header(`Photo Roulette · Photo ${k + 1} / ${n}`, 'text-cyan-300')}
+      <div class="flex-1 min-h-0 grid grid-cols-3 gap-10 mt-4">
+        <div class="col-span-2 min-h-0 flex items-center justify-center rounded-[2rem] glass p-4 border-2 !border-cyan-400/40 shadow-[0_0_80px_-20px_rgba(34,211,238,.5)]">
+          <img src="${p.data}" alt="" class="max-w-full max-h-full object-contain rounded-2xl">
+        </div>
+        <div class="flex flex-col justify-center text-center">
+          <div class="text-[5rem] leading-none">🕵️</div>
+          <p class="text-4xl font-black text-white mt-6 leading-tight">Qui a posté cette photo ?</p>
+          <div class="mt-10 rounded-2xl bg-slate-900/70 px-6 py-6 border border-pink-400/30">
+            <span class="text-slate-400 text-xl block mb-2">Posté par</span>
+            ${rv(sid, 'author', p.author, 'text-pink-300 text-[4rem] font-black leading-none')}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ----- Phase 8A : bulletins ----- */
+function rBulletin(el, b, k, n) {
+  const sid = b.id, plus = b.type === 'plus';
+  el.innerHTML = `
+    <div class="h-full flex flex-col">
+      ${header(`Conseil de Tribu · Électeur mystère n°${k} / ${n} · ${plus ? 'son vote +' : 'son vote −'}`, plus ? 'text-emerald-300' : 'text-rose-300', `<span class="text-slate-500 text-lg">🔒 Électeur anonyme</span>`)}
+      <div class="flex-1 min-h-0 flex flex-col items-center justify-center">
+        <div class="w-full max-w-5xl rounded-[2.2rem] p-12 text-center border-4 ${plus ? 'border-emerald-400 bg-emerald-400/10 shadow-[0_0_90px_-20px_rgba(52,211,153,.7)]' : 'border-rose-400 bg-rose-500/10 shadow-[0_0_90px_-20px_rgba(251,113,133,.7)]'}">
+          <div class="inline-block rounded-2xl px-8 py-3 text-4xl font-black tracking-wider ${plus ? 'bg-emerald-400 text-emerald-950' : 'bg-rose-500 text-rose-50'}">${plus ? 'VOTE +' : 'VOTE −'}</div>
+          <p class="text-2xl text-slate-300 mt-6">${esc(plus ? C.texteVotePlus : C.texteVoteMoins)}</p>
+          <div class="mt-6">${rv(sid, 'target', b.target, `text-[6rem] font-black leading-none ${plus ? 'text-emerald-300' : 'text-rose-300'}`)}</div>
+          <div class="mt-8 rounded-2xl bg-slate-900/60 px-8 py-6 text-left">
+            <span class="text-slate-400 text-lg block mb-2">Justification</span>
+            ${rv(sid, 'why', b.why || '(sans justification)', 'text-3xl font-semibold text-white leading-snug')}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ----- Phase 8B : verdict final ----- */
+function rFinal(el) {
+  const T = conseilTotals(), sid = 'final';
+  const names = w => w.who.length ? w.who.join(' & ') : '—';
+  el.innerHTML = `
+    <div class="h-full flex flex-col">
+      ${header('Conseil de Tribu · Le verdict final', 'text-amber-300')}
+      <div class="flex-1 min-h-0 grid grid-cols-2 gap-10 items-center mt-4">
+        <div class="rounded-[2rem] p-10 text-center border-4 border-rose-500 bg-gradient-to-b from-rose-500/20 to-transparent shadow-[0_0_100px_-20px_rgba(244,63,94,.8)]">
+          <div class="text-[5.5rem] leading-none">💀</div>
+          <p class="kicker text-rose-300 mt-4">Le Grand Perdant</p>
+          <div class="mt-4 min-h-[5.5rem] grid place-items-center">${rv(sid, 'loser', names(T.loser), 'text-[4.6rem] font-black text-white leading-none neon-p')}</div>
+          <div class="mt-3 text-3xl font-black text-rose-300">${rv(sid, 'loser', T.loser.max ? `−${T.loser.max} vote(s)` : '0 vote')}</div>
+        </div>
+        <div class="rounded-[2rem] p-10 text-center border-4 border-amber-300 bg-gradient-to-b from-amber-300/20 to-transparent shadow-[0_0_100px_-20px_rgba(251,191,36,.8)]">
+          <div class="text-[5.5rem] leading-none">👑</div>
+          <p class="kicker text-amber-300 mt-4">Le Boss de la soirée</p>
+          <div class="mt-4 min-h-[5.5rem] grid place-items-center">${rv(sid, 'boss', names(T.boss), 'text-[4.6rem] font-black text-white leading-none neon-v')}</div>
+          <div class="mt-3 text-3xl font-black text-emerald-300">${rv(sid, 'boss', T.boss.max ? `+${T.boss.max} vote(s)` : '0 vote')}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ----- Phase 8C : classement complet ----- */
+function rScores(el) {
+  const T = conseilTotals();
+  const rows = C.joueurs.map(j => ({ j, p: T.plus[j] || 0, m: T.moins[j] || 0 })).sort((a, b) => (b.p - b.m) - (a.p - a.m) || b.p - a.p);
+  const maxV = Math.max(1, ...rows.map(r => Math.max(r.p, r.m)));
+  el.innerHTML = `
+    <div class="h-full flex flex-col">
+      ${header('Conseil de Tribu · Classement complet', 'text-amber-300')}
+      <div class="flex-1 min-h-0 flex flex-col justify-center gap-3 max-w-6xl w-full mx-auto">
+        <div class="grid grid-cols-[3rem_10rem_1fr_1fr_5rem] gap-4 text-sm font-bold uppercase tracking-widest text-slate-500 px-4">
+          <span>#</span><span>Joueur</span><span class="text-right text-rose-300">Votes −</span><span class="text-emerald-300">Votes +</span><span class="text-right">Bilan</span>
+        </div>
+        ${rows.map((r, i) => `
+          <div class="grid grid-cols-[3rem_10rem_1fr_1fr_5rem] gap-4 items-center glass rounded-xl px-4 py-2.5">
+            <span class="text-2xl font-black text-slate-400">${i + 1}</span>
+            <span class="text-2xl font-black text-white truncate">${esc(r.j)}</span>
+            <div class="flex justify-end items-center gap-2"><span class="text-rose-300 font-bold">${r.m || ''}</span><div class="h-6 rounded-l-md bg-rose-500 transition-[width] duration-1000" style="width:0" data-w="${r.m / maxV * 100}%"></div></div>
+            <div class="flex items-center gap-2"><div class="h-6 rounded-r-md bg-emerald-400 transition-[width] duration-1000" style="width:0" data-w="${r.p / maxV * 100}%"></div><span class="text-emerald-300 font-bold">${r.p || ''}</span></div>
+            <span class="text-right text-2xl font-black ${r.p - r.m > 0 ? 'text-emerald-300' : r.p - r.m < 0 ? 'text-rose-300' : 'text-slate-400'}">${r.p - r.m > 0 ? '+' : ''}${r.p - r.m}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  setTimeout(() => $$('[data-w]', el).forEach(b => { b.style.width = b.dataset.w; }), 80);
+}
+
+/* ---------- Moteur de présentation ---------- */
+const stage = $('#stage');
+function destroyCharts() { charts.forEach(c => { try { c.destroy(); } catch (e) {} }); charts = []; }
+function renderSlide(anim = true) {
+  destroyCharts();
+  const sl = slides[cur];
+  const el = document.createElement('div');
+  el.className = 'h-full ' + (anim ? (dir >= 0 ? 'in-right' : 'in-left') : '');
+  stage.innerHTML = ''; stage.appendChild(el);
+  sl.render(el);
+  stage._slideEl = el; stage._slideId = sl.id;
+  updateNav();
+}
+function goto(n, anim = true) {
+  n = Math.max(0, Math.min(slides.length - 1, n));
+  if (n === cur && stage._slideId === slides[n].id) return;
+  dir = n >= cur ? 1 : -1; cur = n; qqSel = null; renderSlide(anim);
+}
+const pendingStep = sl => (sl.steps || []).find(s => !isRev(sl.id, s.k));
+/* LE bouton unique : révèle l'étape suivante, sinon passe à la slide suivante */
+function advance() {
+  const sl = slides[cur], st = pendingStep(sl);
+  if (st) doReveal(sl, st.k); else goto(cur + 1);
+}
+function doReveal(sl, key) {
+  REV[sl.id] = REV[sl.id] || {}; REV[sl.id][key] = true;
+  $$(`[data-rv="${key}"]`, stage).forEach(x => { x.classList.add('shown', 'flash'); setTimeout(() => x.classList.remove('flash'), 1000); });
+  if (sl.onReveal) sl.onReveal(stage._slideEl, key);
+  updateNav();
+}
+function updateNav() {
+  const sl = slides[cur], st = pendingStep(sl);
+  $('#slideInfo').textContent = `Slide ${cur + 1} / ${slides.length} · ${PHASES[sl.phase]}`;
+  $('#prevBtn').disabled = cur === 0;
+  const nb = $('#nextBtn');
+  if (st) { nb.textContent = `Révéler : ${st.label} ▶`; nb.className = 'btn btn-reveal !py-2.5 min-w-[13rem]'; nb.disabled = false; }
+  else { nb.textContent = 'Suivant ▶'; nb.className = 'btn btn-v !py-2.5 min-w-[13rem]'; nb.disabled = cur === slides.length - 1; }
+  $('#stepPills').innerHTML = (sl.steps || []).length > 1 ? sl.steps.map(s => `<span class="step-pill ${isRev(sl.id, s.k) ? 'done' : s === st ? 'next' : ''}">${isRev(sl.id, s.k) ? '✔ ' : ''}${esc(s.label)}</span>`).join('') : '';
+  $('#phaseNav').innerHTML = PHASES.map((p, i) => `<button data-phase="${i}" title="${esc(p)}" class="px-2.5 py-0.5 rounded-md text-xs font-bold ${sl.phase === i ? 'bg-violet-500 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}">${i === 0 ? '⌂' : 'P' + i}</button>`).join('');
+}
+function renderBadges() {
+  const n = C.joueurs.filter(hasAnswered).length;
+  $('#respCount').textContent = `${n}/${C.joueurs.length}`;
+  $('#badges').innerHTML = C.joueurs.map(j => `<span class="badge ${hasAnswered(j) ? 'ok' : ''}" title="${hasAnswered(j) ? 'Envoyé à ' + hhmm(R[fbKey(j)].envoyeLe) : 'Pas encore répondu'}">${hasAnswered(j) ? '✔ ' : ''}${esc(j)}</span>`).join('');
+  renderLinks();
+}
+function renderLinks() {
+  $('#linksList').innerHTML = C.joueurs.map(j => `
+    <div class="flex items-center gap-2 text-sm rounded-lg bg-slate-800/70 px-2.5 py-1.5">
+      <span class="${hasAnswered(j) ? 'text-emerald-400' : 'text-slate-500'}">${hasAnswered(j) ? '✔' : '⏳'}</span>
+      <span class="font-bold text-slate-200 w-16 truncate">${esc(j)}</span>
+      <span class="flex-1 truncate text-slate-500 text-xs">${esc(linkFor(j))}</span>
+      <button class="text-cyan-300 text-xs font-bold hover:text-white" data-copy="${esc(j)}">Copier</button>
+    </div>`).join('');
+  $('#linksWarn').textContent = /^https?:/.test(PLAYER_URL) ? '' : '⚠️ Tu ouvres l\'admin en local : ces liens ne marcheront pas sur les téléphones. Remplis "urlSite" dans config.js (ou ouvre l\'admin depuis GitHub Pages).';
+}
+function setStatus() {
+  const pill = $('#modePill'), st = $('#toolsStatus');
+  if (db) {
+    pill.textContent = fbConnected ? '● Live' : '● Connexion…';
+    pill.className = 'text-[.7rem] font-bold uppercase tracking-widest px-2 py-1 rounded-md ' + (fbConnected ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300');
+    st.innerHTML = `${fbConnected ? '🟢 Firebase connecté' : '🟠 Connexion à Firebase…'}<br><span class="text-slate-400">Chemin : /${esc(DOSSIER)}</span>`;
+  } else {
+    pill.textContent = 'Mode local';
+    pill.className = 'text-[.7rem] font-bold uppercase tracking-widest px-2 py-1 rounded-md bg-amber-500/15 text-amber-300';
+    st.innerHTML = `🟠 <b>Mode local</b> : Firebase n'est pas configuré dans config.js.<br><span class="text-slate-400">Les données restent dans ce navigateur. Les téléphones ne seront PAS synchronisés.</span>`;
+  }
+}
+
+/* Mise à jour en direct quand une réponse arrive */
+function onData() {
+  renderBadges();
+  const curId = slides[cur] && slides[cur].id;
+  buildSlides();
+  let n = slides.findIndex(s => s.id === curId);
+  if (n < 0) n = Math.min(cur, slides.length - 1);
+  const same = n === cur && stage._slideId === curId && slides[n].update;
+  cur = n;
+  if (same) { slides[cur].update(stage._slideEl); updateNav(); }
+  else renderSlide(false);
+}
+
+/* ---------- Confettis ---------- */
+function confetti(colors = ['#fbbf24', '#f472b6', '#22d3ee', '#a78bfa', '#34d399', '#fff'], count = 160) {
+  for (let i = 0; i < count; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.left = Math.random() * 100 + 'vw';
+    c.style.background = pick(colors);
+    c.style.setProperty('--dx', (Math.random() * 300 - 150) + 'px');
+    c.style.setProperty('--rot', (Math.random() * 1440 - 720) + 'deg');
+    c.style.animationDuration = (2.4 + Math.random() * 2.4) + 's';
+    c.style.animationDelay = (Math.random() * .6) + 's';
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 5800);
+  }
+}
+
+/* ---------- Données démo ---------- */
+const DEMO_GAGES = [
+  "Faire une déclaration d'amour à la personne de ton choix devant tout le monde.",
+  "Imiter chaque joueur de la table pendant 10 secondes.",
+  "Chanter le refrain d'une chanson choisie par la table.",
+  "Envoyer « tu me manques » à ton ex (ou à ta mère).",
+  "Parler avec un accent italien jusqu'au prochain gage.",
+  "Faire 20 pompes, maintenant.",
+  "Laisser la table poster une story sur ton Insta.",
+  "Danser seul au milieu de la pièce pendant 30 secondes.",
+];
+const DEMO_VERITES = [
+  "Tu es tout le temps en retard, et tu arrives toujours avec une excuse différente.",
+  "T'es le pote sur qui on peut compter à 3h du mat. Respect.",
+  "Tu parles plus fort quand t'as tort. On a tous remarqué.",
+  "Tu commandes « juste une dernière » depuis 2019.",
+  "T'as un plan B, un plan C, mais jamais de plan A.",
+  "Franchement t'as le meilleur rire du groupe, ne change rien.",
+  "Tu réponds aux messages comme un fonctionnaire : du lundi au vendredi, 10h–11h.",
+  "Tu racontes la même anecdote depuis 4 ans et tu rajoutes un détail à chaque fois.",
+  "T'es beaucoup plus drôle que tu ne le crois. Et beaucoup moins bon en FIFA.",
+];
+const DEMO_TOP = ['Démo · Camille', 'Démo · Sarah', '@demo.julie', '@exemple_lea', 'Démo · Inès', 'Démo · Manon', '@demo.chloe', 'Démo · Emma', '@exemple.zoe'];
+const DEMO_PLUS = ["Il a été là quand il fallait, sans rien demander.", "Orga de la dernière soirée : parfaite.", "Il a géré ses exams / son taf comme un chef.", "Toujours chaud, jamais en retard (presque).", "Il a enfin rangé sa vie, respect."];
+const DEMO_MOINS = ["A annulé 3 plans au dernier moment.", "Disparu des radars depuis un mois.", "A encore oublié de rembourser la dernière tournée.", "Vocal de 7 minutes pour dire non.", "En PLS à 23h la dernière fois. Inacceptable."];
+const DEMO_QQ = [
+  ['4h12', '6h47', '2h05', '9h30', '3h58', '7h21', '5h03', '1h44'],
+  ['hier soir', 'ce matin 😳', 'il y a 3 jours', 'la semaine passée', 'il y a 2h', 'secret défense', 'j\'ai arrêté de compter', 'avant-hier'],
+  ['Les Démons de Minuit', 'Wejdene', 'Céline Dion', 'Jul', 'Britney Spears', 'Indochine', 'Annie Cordy', 'Lorie'],
+  ['comment enlever une tache de vin rouge', 'friterie ouverte 3h Liège', 'est-ce que les poissons dorment', 'prix d\'un lama', 'comment avoir l\'air sobre', 'mal de dos à 25 ans normal ?', 'traduction « tu me manques » en italien', 'combien de temps pour cuire un œuf'],
+  ['1 800 €', '2 400 €', '3 200 € (espéré)', '1 450 €', '5 000 € (rêve)', '2 050 €', '900 € de chômage', '2 700 €'],
+];
+const DEMO_EMOJI = ['🍕', '🍻', '🏖️', '🎮', '🐶', '🚗', '🎸', '⚽', '🌋', '🦖'];
+
+function demoPhoto(n) {
+  const c = document.createElement('canvas'); c.width = 960; c.height = n % 2 ? 1200 : 720;
+  const g = c.getContext('2d'), hue = (n * 47) % 360;
+  const gr = g.createLinearGradient(0, 0, c.width, c.height);
+  gr.addColorStop(0, `hsl(${hue},70%,45%)`); gr.addColorStop(1, `hsl(${(hue + 80) % 360},70%,25%)`);
+  g.fillStyle = gr; g.fillRect(0, 0, c.width, c.height);
+  g.font = '260px serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(DEMO_EMOJI[n % DEMO_EMOJI.length], c.width / 2, c.height / 2 - 40);
+  g.font = 'bold 56px sans-serif'; g.fillStyle = 'rgba(255,255,255,.85)';
+  g.fillText('Photo démo #' + (n + 1), c.width / 2, c.height - 90);
+  return c.toDataURL('image/jpeg', .8);
+}
+
+function generateDemo() {
+  const J = C.joueurs, out = {}, ph = {};
+  const TRIB = tribunalAssignments(), verites = shuffle(DEMO_VERITES);
+  const GAGE = gageAssignments(), gagesDemo = shuffle(DEMO_GAGES);
+  const photoDemo = typeof window.DEMO_PHOTO === 'string' && window.DEMO_PHOTO.startsWith('data:image') ? window.DEMO_PHOTO : null;
+  const favQui = C.quiEstLePlus.map(() => pick(J));
+  const biasDuel = C.duels.map(() => .2 + Math.random() * .6);
+  const qqPools = C.quiEstQui.map((q, i) => shuffle(DEMO_QQ[i] || J.map((x, k) => 'Réponse démo ' + (k + 1))));
+  const favPlus = pick(J), favMoins = pick(J.filter(j => j !== favPlus));
+  const clamp = x => Math.max(0, Math.min(10, Math.round(x)));
+  J.forEach((p, n) => {
+    const others = J.filter(j => j !== p);
+    const opts = C.conseilInterdireAutoVote ? others : J;
+    const r = { joueur: p, envoyeLe: Date.now() - (J.length - n) * 37 * 60000, qui: {}, duels: {}, quiEstQui: {}, tribunal: {}, top3: {}, conseil: {}, aPhoto: true };
+    C.quiEstLePlus.forEach((q, i) => { r.qui['q' + i] = Math.random() < .45 ? favQui[i] : pick(J); });
+    C.duels.forEach((d, i) => { r.duels['d' + i] = Math.random() < biasDuel[i] ? 'A' : 'B'; });
+    C.quiEstQui.forEach((q, i) => { r.quiEstQui['q' + i] = qqPools[i][n % qqPools[i].length]; });
+    r.tribunal = { cible: TRIB[p], texte: verites[n % verites.length] };
+    r.gage = { cible: GAGE[p], texte: gagesDemo[n % gagesDemo.length] };
+    const tops = shuffle(DEMO_TOP);
+    r.top3 = { top1: tops[0], top2: tops[1], top3: Math.random() < .85 ? tops[2] : '' };
+    const pc = opts.includes(favPlus) && Math.random() < .5 ? favPlus : pick(opts);
+    const mc = opts.includes(favMoins) && Math.random() < .5 ? favMoins : pick(opts);
+    r.conseil = { plus: { cible: pc, pourquoi: pick(DEMO_PLUS) }, moins: { cible: mc, pourquoi: pick(DEMO_MOINS) } };
+    out[fbKey(p)] = r;
+    ph[fbKey(p)] = { joueur: p, data: photoDemo || demoPhoto(n), envoyeLe: r.envoyeLe };
+  });
+  return { out, ph };
+}
+
+/* ---------- Outils ---------- */
+function toolMsg(t) { $('#toolsMsg').textContent = t; setTimeout(() => { if ($('#toolsMsg').textContent === t) $('#toolsMsg').textContent = ''; }, 3500); }
+function resetReveals() { Object.keys(REV).forEach(k => delete REV[k]); Object.keys(QQ_LINKS).forEach(k => delete QQ_LINKS[k]); qqSel = null; }
+function resetOrders() { Object.keys(ORD).forEach(k => ORD[k] = []); }
+function reshuffle(which) { (which ? [which] : Object.keys(ORD)).forEach(w => ORD[w] = []); onData(); }
+function toggleFullscreen() { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.(); }
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (er) {}
+    ta.remove(); return ok;
+  }
+}
+
+document.addEventListener('click', async e => {
+  const t = e.target;
+  if (qqClick(t)) return;
+  const ph = t.closest('[data-phase]'); if (ph) { const i = +ph.dataset.phase; const n = slides.findIndex(s => s.phase === i); if (n >= 0) goto(n); return; }
+  const cp = t.closest('[data-copy]'); if (cp) { const ok = await copyText(linkFor(cp.dataset.copy)); toolMsg(ok ? `✔ Lien de ${cp.dataset.copy} copié` : '❌ Copie impossible'); return; }
+  const d = t.closest('[data-do]');
+  if (d) {
+    const a = d.dataset.do;
+    if (a.startsWith('shuffle:')) reshuffle(a.split(':')[1]);
+    return;
+  }
+  const tool = t.closest('[data-tool]');
+  if (tool) {
+    const a = tool.dataset.tool;
+    try {
+      if (a === 'demo') {
+        if (responses().length && !confirm('Des réponses existent déjà. Les remplacer par des données démo ?')) return;
+        resetReveals(); resetOrders();
+        const { out, ph } = generateDemo();
+        await writeAll(out, ph);
+        toolMsg(db ? '✔ Données démo envoyées dans Firebase' : '✔ Données démo chargées (mode local)');
+      }
+      if (a === 'reset') {
+        if (!confirm('⚠️ Supprimer TOUTES les réponses et photos ?\n\nÀ faire avant d\'envoyer les liens. Action irréversible.')) return;
+        await clearAll(); resetReveals(); resetOrders();
+        onData(); toolMsg('✔ Base vidée');
+      }
+      if (a === 'copyAll') {
+        const txt = `🎉 ${C.titreSoiree} — remplis ton questionnaire avant ce soir (ton lien perso, ne le partage pas) :\n\n` + C.joueurs.map(j => `${j} 👉 ${linkFor(j)}`).join('\n');
+        toolMsg(await copyText(txt) ? '✔ Tous les liens copiés (prêt pour WhatsApp)' : '❌ Copie impossible');
+      }
+      if (a === 'shuffle') { reshuffle(); toolMsg('✔ Ordres re-mélangés'); }
+      if (a === 'resetReveals') { resetReveals(); renderSlide(false); toolMsg('✔ Tout est re-masqué'); }
+      if (a === 'fullscreen') toggleFullscreen();
+    } catch (er) { console.error(er); toolMsg('❌ Erreur : ' + (er.message || er)); }
+  }
+});
+$('#prevBtn').onclick = () => goto(cur - 1);
+$('#nextBtn').onclick = () => advance();
+$('#toolsBtn').onclick = () => $('#tools').classList.toggle('hidden-panel');
+$('#toolsClose').onclick = () => $('#tools').classList.add('hidden-panel');
+
+document.addEventListener('keydown', e => {
+  if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
+  if (e.key === 'ArrowRight' && e.shiftKey) { e.preventDefault(); goto(cur + 1); }
+  else if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); advance(); }
+  else if (['ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); goto(cur - 1); }
+  else if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+  else if (e.key === 'Home') goto(0);
+  else if (e.key === 'End') goto(slides.length - 1);
+});
+// Évite que le focus d'un bouton cliqué intercepte Espace/Entrée
+document.addEventListener('mouseup', () => { if (document.activeElement && document.activeElement.tagName === 'BUTTON') document.activeElement.blur(); });
+window.addEventListener('resize', () => { clearTimeout(window._rs); window._rs = setTimeout(() => renderSlide(false), 250); });
+
+/* ---------- Démarrage ---------- */
+$('#appTitle').textContent = C.titreSoiree;
+if (typeof Chart !== 'undefined') Chart.defaults.font.family = 'Outfit, system-ui, sans-serif';
+setStatus();
+subscribe();
+buildSlides();
+renderBadges();
+renderSlide();
+// Re-dessine une fois la police chargée (sinon Chart.js utilise une police par défaut)
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => renderSlide(false));
+</script>
+</body>
+</html>
