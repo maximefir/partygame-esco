@@ -45,7 +45,7 @@ const CONFIG = {
   /* -------------------------------------------------------------------
      3) JOUEURS PRÉSENTS
      ------------------------------------------------------------------- */
-  joueurs: ["Max", "Benja", "Mich", "Jules", "Lozet", "Grem", "Louis"],
+  joueurs: ["Max", "Benja", "Mich", "Jules", "Lozet", "Grem", "Louis", "DB"],
 
 
   /* -------------------------------------------------------------------
@@ -73,6 +73,8 @@ const CONFIG = {
     { question: "Tu dois cacher un corps ou un gros secret à 3h du mat, qui tu appelles ?",         joueurA: "Grem",  joueurB: "Louis" },
     { question: "Qui est le plus susceptible de lâcher une dinguerie au pire moment ?",             joueurA: "Max",   joueurB: "Jules" },
     { question: "Combat 1v1 sur le ring : qui gagne ?",                                             joueurA: "Lozet", joueurB: "Mich"  },
+    { question: "Qui raconte le mieux une histoire complètement inventée sans se faire griller ?",  joueurA: "DB",    joueurB: "Benja" },
+    { question: "Soirée improvisée un mardi à 23h : qui répond « j'arrive » en premier ?",          joueurA: "DB",    joueurB: "Louis" },
   ],
 
 
@@ -140,4 +142,26 @@ const CONFIG = {
      Laisse "" pour utiliser automatiquement l'adresse de la page admin.
      ------------------------------------------------------------------- */
   urlSite: "https://maximefir.github.io/partygame-esco/",
+
+
+  /* -------------------------------------------------------------------
+     10) ACCÈS SÉCURISÉS (ne pas toucher sauf si tu changes les joueurs)
+     - Chaque joueur n'accède au questionnaire QUE via son lien perso
+       (index.html?c=CODE). Sans code valide : accès refusé.
+     - L'écran admin demande le code admin (mémorisé sur ton ordi).
+     Ce ne sont que des empreintes : les vrais codes ne sont écrits nulle part ici.
+     Si tu ajoutes/renommes un joueur : admin → ⚙️ → "Codes d'accès" te donne
+     les nouvelles lignes à coller ici.
+     ------------------------------------------------------------------- */
+  accesAdmin: "c9fefdbff5c6c107ff0126c9f9935a5724e0e31a25dc837ba06be6c4542fe278",
+  accesJoueurs: {
+    "Max": "0155e107d72d25644ad1e0ea",
+    "Benja": "6557242c71a9ba32e7bf0341",
+    "Mich": "a767dfc4a7c767b1062411c8",
+    "Jules": "10f95946faae037273fe0d22",
+    "Lozet": "0f57fb2cf656d397fd76607d",
+    "Grem": "e525bc75944f515ea8362db2",
+    "Louis": "e3be44dbdbaa291fdf76dc4b",
+    "DB": "896baec06154a707b9bc12fd",
+  },
 };

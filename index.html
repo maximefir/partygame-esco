@@ -328,7 +328,7 @@ const RENDER = {
         <p>🤫 Ne montre rien aux autres : tout sera révélé ce soir sur grand écran.</p>
       </div>
       <div id="identNote" class="mt-5 text-sm"></div>
-      <p class="text-center mt-6"><button class="text-xs text-slate-500 underline" data-act="unlock">Ce n'est pas toi ?</button></p>` : `
+      ${SECURE ? '' : `<p class="text-center mt-6"><button class="text-xs text-slate-500 underline" data-act="unlock">Ce n'est pas toi ?</button></p>`}` : `
       <div class="text-center mb-8">
         <div class="text-5xl mb-3 floaty">🎉</div>
         <p class="text-xs font-bold uppercase tracking-[.3em] text-cyan-300">${esc(C.titreSoiree)}</p>
@@ -746,9 +746,46 @@ document.addEventListener('click', e => {
   else if (act === 'edit') { idx = screens.findIndex(s => s.type === 'recap'); render('left'); }
 });
 
-/* ---------- Démarrage ---------- */
-(function init() {
+/* ---------- Démarrage ----------
+   Accès sécurisé : chaque joueur n'entre QUE via son lien perso (index.html?c=CODE).
+   Le code est comparé à son empreinte (config.js → accesJoueurs). Sans code valide : accès refusé. */
+const SECURE = !!(C.accesJoueurs && Object.keys(C.accesJoueurs).length);
+async function sha256hex(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+function showDenied() {
+  $('#sectionLabel').textContent = 'Accès refusé';
+  $('#stepCounter').textContent = '';
+  $('#progress').style.width = '0%';
+  $('#screen').innerHTML = `
+    <div class="in-right text-center pt-10">
+      <div class="text-7xl mb-6">🔒</div>
+      <h1 class="text-3xl font-black text-white">Lien invalide</h1>
+      <p class="text-slate-300 mt-4 text-lg">Ce questionnaire est personnel.<br>Utilise le lien perso que tu as reçu sur WhatsApp.</p>
+    </div>`;
+  footer('');
+}
+(async function init() {
   const params = new URLSearchParams(location.search);
+  if (SECURE) {
+    const c = (params.get('c') || '').trim().toLowerCase();
+    let who = null;
+    try {
+      if (c && window.crypto && crypto.subtle) {
+        const h = (await sha256hex(c)).slice(0, 24);
+        who = Object.keys(C.accesJoueurs).find(j => C.accesJoueurs[j] === h && C.joueurs.includes(j)) || null;
+      }
+    } catch (e) { console.error(e); }
+    if (!who) { showDenied(); return; }
+    lockedPlayer = who;
+    buildScreens();
+    pickPlayer(who);
+    idx = 0;
+    render();
+    return;
+  }
+  // Mode sans codes (tests en local) : choix du prénom libre
   const u = (params.get('user') || '').trim().toLowerCase();
   const fromUrl = C.joueurs.find(j => j.toLowerCase() === u);
   const last = LS.get('soireeQuiz_lastPlayer_' + DOSSIER);

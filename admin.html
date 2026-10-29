@@ -168,9 +168,23 @@
       <button class="btn btn-ghost !py-2 !text-sm" data-tool="shuffle">🔀 Re-mélanger cartes / podiums / photos / bulletins</button>
       <button class="btn btn-ghost !py-2 !text-sm" data-tool="resetReveals">🙈 Re-masquer toutes les révélations</button>
       <button class="btn btn-ghost !py-2 !text-sm" data-tool="fullscreen">⛶ Plein écran</button>
+      <button class="btn btn-ghost !py-2 !text-sm" data-tool="accessCodes">🔑 Codes d'accès (pour config.js)</button>
+      <button class="btn btn-ghost !py-2 !text-sm" data-tool="lock">🔒 Verrouiller l'admin sur cet ordi</button>
       <button class="btn btn-r !py-2 !text-sm" data-tool="reset">🗑️ Reset Database</button>
     </div>
     <p id="toolsMsg" class="text-xs text-emerald-300 mt-3 min-h-[1rem]"></p>
+  </div>
+
+  <!-- ===== VERROU ADMIN ===== -->
+  <div id="lock" class="hidden fixed inset-0 z-[300] grid place-items-center bg-[#0f172a]">
+    <form id="lockForm" class="glass rounded-3xl p-10 w-[28rem] text-center">
+      <div class="text-6xl">🔒</div>
+      <h1 class="text-3xl font-black text-white mt-4">Écran admin</h1>
+      <p class="text-slate-400 mt-2">Entre le code admin (il sera mémorisé sur cet ordinateur).</p>
+      <input id="lockInput" type="password" autocomplete="current-password" class="mt-6 w-full rounded-xl bg-slate-900 border-2 border-slate-700 focus:border-violet-400 outline-none px-4 py-3 text-lg text-white" placeholder="Code admin">
+      <p id="lockErr" class="text-rose-300 text-sm mt-3 min-h-[1.25rem]"></p>
+      <button class="btn btn-v w-full mt-2" type="submit">Déverrouiller</button>
+    </form>
   </div>
 
 <script>
@@ -185,7 +199,23 @@ const REF_PHOTOS = DOSSIER + '/photos';
 const LOCAL_DB_KEY = 'soireeQuiz_localDB_' + DOSSIER;
 const LOCAL_PHOTO_KEY = 'soireeQuiz_localPhotos_' + DOSSIER;
 const PLAYER_URL = new URL('index.html', (C.urlSite || '').trim() || location.href).href;
-const linkFor = j => PLAYER_URL + '?user=' + encodeURIComponent(j);
+const SECURE = !!(C.accesJoueurs && Object.keys(C.accesJoueurs).length);
+let CODES = {}, CODE_OK = {};   // codes perso calculés à partir du code admin (jamais stockés dans config.js)
+const linkFor = j => CODES[j] ? PLAYER_URL + '?c=' + CODES[j] : PLAYER_URL + '?user=' + encodeURIComponent(j);
+const CODE_ALPH = 'abcdefghijkmnpqrstuvwxyz23456789';
+async function sha256hex(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+async function computeCodes(secret) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  CODES = {}; CODE_OK = {};
+  for (const j of C.joueurs) {
+    const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode('joueur:' + j)));
+    CODES[j] = [...sig.slice(0, 10)].map(b => CODE_ALPH[b % 32]).join('');
+    CODE_OK[j] = !SECURE || (C.accesJoueurs[j] === (await sha256hex(CODES[j])).slice(0, 24));
+  }
+}
 
 /* ---------- Utilitaires ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -920,7 +950,12 @@ function renderLinks() {
       <span class="flex-1 truncate text-slate-500 text-xs">${esc(linkFor(j))}</span>
       <button class="text-cyan-300 text-xs font-bold hover:text-white" data-copy="${esc(j)}">Copier</button>
     </div>`).join('');
-  $('#linksWarn').textContent = /^https?:/.test(PLAYER_URL) ? '' : '⚠️ Tu ouvres l\'admin en local : ces liens ne marcheront pas sur les téléphones. Remplis "urlSite" dans config.js (ou ouvre l\'admin depuis GitHub Pages).';
+  const warns = [];
+  if (!/^https?:/.test(PLAYER_URL)) warns.push('⚠️ Tu ouvres l\'admin en local : ces liens ne marcheront pas sur les téléphones. Remplis "urlSite" dans config.js (ou ouvre l\'admin depuis GitHub Pages).');
+  const bad = C.joueurs.filter(j => CODES[j] && !CODE_OK[j]);
+  if (bad.length) warns.push(`⚠️ Code d'accès non configuré pour : ${bad.join(', ')}. Bouton « Codes d'accès » ci-dessous → colle le résultat dans config.js.`);
+  $('#linksWarn').textContent = warns.join(' ');
+  $$('[data-copy]').forEach(b => { if (CODES[b.dataset.copy] && !CODE_OK[b.dataset.copy]) b.textContent = '⚠️ Copier'; });
 }
 function setStatus() {
   const pill = $('#modePill'), st = $('#toolsStatus');
@@ -1090,6 +1125,13 @@ document.addEventListener('click', async e => {
       if (a === 'shuffle') { reshuffle(); toolMsg('✔ Ordres re-mélangés'); }
       if (a === 'resetReveals') { resetReveals(); renderSlide(false); toolMsg('✔ Tout est re-masqué'); }
       if (a === 'fullscreen') toggleFullscreen();
+      if (a === 'lock') { LS.del(ADMIN_KEY); location.reload(); }
+      if (a === 'accessCodes') {
+        const lines = [];
+        for (const j of C.joueurs) lines.push(`    "${j}": "${(await sha256hex(CODES[j])).slice(0, 24)}",`);
+        const txt = '  accesJoueurs: {\n' + lines.join('\n') + '\n  },';
+        toolMsg(await copyText(txt) ? '✔ Bloc accesJoueurs copié : colle-le dans config.js à la place de l\'ancien' : '❌ Copie impossible');
+      }
     } catch (er) { console.error(er); toolMsg('❌ Erreur : ' + (er.message || er)); }
   }
 });
@@ -1111,16 +1153,38 @@ document.addEventListener('keydown', e => {
 document.addEventListener('mouseup', () => { if (document.activeElement && document.activeElement.tagName === 'BUTTON') document.activeElement.blur(); });
 window.addEventListener('resize', () => { clearTimeout(window._rs); window._rs = setTimeout(() => renderSlide(false), 250); });
 
-/* ---------- Démarrage ---------- */
-$('#appTitle').textContent = C.titreSoiree;
-if (typeof Chart !== 'undefined') Chart.defaults.font.family = 'Outfit, system-ui, sans-serif';
-setStatus();
-subscribe();
-buildSlides();
-renderBadges();
-renderSlide();
-// Re-dessine une fois la police chargée (sinon Chart.js utilise une police par défaut)
-if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => renderSlide(false));
+/* ---------- Démarrage (après déverrouillage) ---------- */
+const ADMIN_KEY = 'soireeQuiz_admin_' + DOSSIER;
+async function checkAdmin(secret) {
+  if (!C.accesAdmin) return true;
+  try { return !!secret && (await sha256hex(secret)) === C.accesAdmin; } catch (e) { return false; }
+}
+async function boot(secret) {
+  $('#lock').classList.add('hidden');
+  if (secret) await computeCodes(secret);
+  $('#appTitle').textContent = C.titreSoiree;
+  if (typeof Chart !== 'undefined') Chart.defaults.font.family = 'Outfit, system-ui, sans-serif';
+  setStatus();
+  subscribe();
+  buildSlides();
+  renderBadges();
+  renderSlide();
+  // Re-dessine une fois la police chargée (sinon Chart.js utilise une police par défaut)
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => renderSlide(false));
+}
+(async () => {
+  const stored = LS.get(ADMIN_KEY);
+  if (!C.accesAdmin) return boot(null);
+  if (await checkAdmin(stored)) return boot(stored);
+  $('#lock').classList.remove('hidden');
+  $('#lockInput').focus();
+  $('#lockForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const v = $('#lockInput').value.trim();
+    if (await checkAdmin(v)) { LS.set(ADMIN_KEY, v); boot(v); }
+    else { $('#lockErr').textContent = 'Code incorrect'; $('#lockInput').select(); }
+  });
+})();
 </script>
 </body>
 </html>
